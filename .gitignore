@@ -1,3 +1,24 @@
+# Ignore all of these file extensions regardless of directory:
+**.pdf
+**.DS_Store
+**__pycache__
+**.ai
+**.ipynb_checkpoints
+**.hdf5
+**.psd
+**.pkl
+**.zip
+**.Rproj.user
+**.Rhistory
+**.RData
+**.Ruserdata
+
+# Ignore any folders with this name
+**/tmp/
+**/pickles/
+**/wav/
+**/h5/
+
 # PyCharm
 .idea
 
