@@ -10,6 +10,12 @@
 # This file contains the Chang Lab imaging pipeline (freeCoG)
 # as one importable python class for running a patients
 # brain surface reconstruction and electrode localization/labeling
+#
+# Tweaked by Lynn Kurteff
+# Laboratory of Greg Hickok
+# Department of Cognitive Sciences
+# University of California, Irvine
+# Date Last Edited: May 29, 2025
 
 import os
 import glob
@@ -65,7 +71,7 @@ class freeCoG:
     >>> subj_dir = '/usr/local/freesurfer/subjects'      
     >>> hem = 'rh'       
     >>> fs_dir = '/usr/local/freesurfer'     
-    >>> patient = img_pipe.freeCoG(subj = subj, subj_dir = subj_dir, hem = hem, fs_dir = fs_dir)
+    >>> patient = kimg_pipe.freeCoG(subj = subj, subj_dir = subj_dir, hem = hem, fs_dir = fs_dir)
     
     Parameters
     ----------       
@@ -92,8 +98,8 @@ class freeCoG:
         Usually [subj_dir]/[subj]
     hem : str
         The hemisphere of implantation
-    img_pipe_dir : str
-        The path to img_pipe code.
+    kimg_pipe_dir : str
+        The path to kimg_pipe code.
     zero_indexed_electrodes : bool
         Whether zero-indexed electrode numbers are used (True)
         or not (False)
@@ -116,7 +122,7 @@ class freeCoG:
 
     Returns
     ----------
-    patient : <img_pipe.freeCoG instance>
+    patient : <kimg_pipe.freeCoG instance>
         patient object, including information about subject ID, hemisphere, where data live, 
         and related functions for creating surface reconstructions and/or plotting.    
 
@@ -141,7 +147,7 @@ class freeCoG:
     
         Returns
         ----------   
-        patient : <img_pipe.freeCoG instance>
+        patient : <kimg_pipe.freeCoG instance>
             patient object, including information about subject ID, hemisphere, where data live, 
             and related functions for creating surface reconstructions and/or plotting.    
         '''
@@ -153,7 +159,7 @@ class freeCoG:
         self.subj_dir = subj_dir
         self.patient_dir = os.path.join(self.subj_dir, self.subj)
         self.hem = hem
-        self.img_pipe_dir = os.path.dirname(os.path.realpath(__file__))
+        self.kimg_pipe_dir = os.path.dirname(os.path.realpath(__file__))
         self.zero_indexed_electrodes = zero_indexed_electrodes
 
         # Freesurfer home directory
@@ -350,7 +356,7 @@ class freeCoG:
             print("Creating directory %s"%(individual_elecs_dir))
             os.mkdir(individual_elecs_dir)
         print("Launching electrode picker")
-        epicker = os.path.join(self.img_pipe_dir, 'SupplementalScripts', 'electrode_picker.py')
+        epicker = os.path.join(self.kimg_pipe_dir, 'SupplementalScripts', 'electrode_picker.py')
         os.system('python %s %s %s'%(epicker, os.path.join(self.subj_dir, self.subj), self.hem))
 
     def convert_fsmesh2mlab(self, mesh_name='pial'):
@@ -710,7 +716,7 @@ class freeCoG:
         '''
 
         # load in clinical grid indices
-        clingrid = scipy.io.loadmat(os.path.join(self.img_pipe_dir, 'SupplementalFiles','clingrid_inds.mat'))['inds'].ravel()
+        clingrid = scipy.io.loadmat(os.path.join(self.kimg_pipe_dir, 'SupplementalFiles','clingrid_inds.mat'))['inds'].ravel()
 
         # load in high density grid coordinates
         hd = scipy.io.loadmat(os.path.join(self.elecs_dir, 'individual_elecs', elecfile_prefix+'.mat'))['elecmatrix']
@@ -765,7 +771,7 @@ class freeCoG:
                     hd_label.append(''.join(lead))
 
             # load in clinical grid indices
-            clingrid = scipy.io.loadmat(os.path.join(self.img_pipe_dir, 'SupplementalFiles', 'clingrid_inds.mat'))['inds'].ravel()
+            clingrid = scipy.io.loadmat(os.path.join(self.kimg_pipe_dir, 'SupplementalFiles', 'clingrid_inds.mat'))['inds'].ravel()
             # If we have a grid that is smaller than 256 channels, remove the irrelevant clinical grid indices
             clingrid = clingrid[clingrid < hd.shape[0]]
             # get clinical grid coordinates using the relevant indices
@@ -823,8 +829,8 @@ class freeCoG:
 
         # tessellate all subjects freesurfer subcortical segmentations
         print('::: Tesselating freesurfer subcortical segmentations from aseg using aseg2srf... :::')
-        print(os.path.join(self.img_pipe_dir, 'SupplementalScripts', 'aseg2srf.sh'))
-        os.system(os.path.join(self.img_pipe_dir, 'SupplementalScripts', 'aseg2srf.sh') + ' -s "%s" -l "4 5 10 11 12 13 17 18 26 \
+        print(os.path.join(self.kimg_pipe_dir, 'SupplementalScripts', 'aseg2srf.sh'))
+        os.system(os.path.join(self.kimg_pipe_dir, 'SupplementalScripts', 'aseg2srf.sh') + ' -s "%s" -l "4 5 10 11 12 13 17 18 26 \
                  28 43 44  49 50 51 52 53 54 58 60 14 15 16" -d' % (self.subj))
 
         # get list of all .srf files and change fname to .asc
@@ -1751,10 +1757,10 @@ class freeCoG:
         marked with a red title.        
         '''
 
-        fs_lut = os.path.join(self.img_pipe_dir, 'SupplementalFiles', 'FreeSurferLUTRGBValues.npy')
+        fs_lut = os.path.join(self.kimg_pipe_dir, 'SupplementalFiles', 'FreeSurferLUTRGBValues.npy')
         cmap = matplotlib.colors.ListedColormap(np.load(fs_lut)[:cvs_dat.max()+1,:])
 
-        lookupTable = os.path.join(self.img_pipe_dir, 'SupplementalFiles', 'FreeSurferLookupTable')
+        lookupTable = os.path.join(self.kimg_pipe_dir, 'SupplementalFiles', 'FreeSurferLookupTable')
         lookup_dict = pickle.load(open(lookupTable,'r'))
         fig = plt.figure(figsize=((30,17)))
         nonzero_indices = np.where(cvs_dat>0)
@@ -2523,7 +2529,7 @@ class freeCoG:
 
     def obj_to_mat(self, hem=None, roi_name='pial'):
         '''This function reads in a .obj file and converts it to .mat format
-        to be read into img_pipe or matlab.
+        to be read into kimg_pipe or matlab.
 
         Parameters
         ----------
@@ -3001,7 +3007,7 @@ if __name__ == "__main__":
     init_method = free_methods.pop(0)
 
     # Build parser
-    parser = argparse.ArgumentParser(description=('img_pipe '))
+    parser = argparse.ArgumentParser(description=('kimg_pipe '))
     _method_args_to_parser(init_method[1],parser)
     subparsers = parser.add_subparsers(dest='method',metavar='method')
     # Create subparser for each freeCoG method

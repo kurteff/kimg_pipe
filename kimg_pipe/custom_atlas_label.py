@@ -13,7 +13,7 @@ subject_list = ['EC183','EC186']
 #EC118 taken out because of strange audio electrodes
 #EC110 has a serious problem with the warping and needs to be looked at again. it has been removed for now
 
-LUT_path = '/Users/benspeidel/Documents/GitHub/img_pipe/img_pipe/SupplementalFiles/FreeSurferLUT.xml'
+LUT_path = '/Users/benspeidel/Documents/GitHub/kimg_pipe/kimg_pipe/SupplementalFiles/FreeSurferLUT.xml'
 
 
 
