@@ -6,14 +6,14 @@ class MyInstall(install):
 
     def run(self):
         install.run(self)
-        os.system("./img_pipe/dependencies.sh")
+        os.system("./kimg_pipe/dependencies.sh")
 
-setup(name = "img_pipe",
-	  description = "Image processing pipeline for localization and identification of electrodes for electrocorticography",
-	  version = "2019.3.15.1",
-	  url = "https://github.com/ChangLabUcsf/img_pipe",
-	  author = "Liberty Hamilton",
-	  author_email = "libertyhamilton@gmail.com",
+setup(name = "kimg_pipe",
+	  description = "FORK OF: Image processing pipeline for localization and identification of electrodes for electrocorticography",
+	  version = "2025.5.29",
+	  url = "https://github.com/kurteff/kimg_pipe/",
+	  author = "G. Lynn Kurteff",
+	  author_email = "lkurteff@uci.edu",
 	  packages = find_packages(),
 	  include_package_data = True,
 	  setup_requires=['cython','numpy','scipy'],

@@ -1,5 +1,5 @@
-recursive-include img_pipe *
-include img_pipe/dependencies.sh
+recursive-include kimg_pipe *
+include kimg_pipe/dependencies.sh
 include README.md
 include requirements.txt
 

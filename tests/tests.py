@@ -8,12 +8,12 @@ print(sys.version_info)
 if sys.version_info < (3, 0):
     print("Using Python 2.7")
     # Just test whether the import works
-    import img_pipe
+    import kimg_pipe
 else:
     print("Using Python 3.5")
-    from img_pipe import img_pipe
+    from kimg_pipe import kimg_pipe
 
-patient = img_pipe.freeCoG(subj = 'S1', hem = 'lh', fs_dir='', subj_dir='.')
+patient = kimg_pipe.freeCoG(subj = 'S1', hem = 'lh', fs_dir='', subj_dir='.')
 
 # Test whether mayavi works
 import mayavi
@@ -22,5 +22,5 @@ from mayavi import mlab
 mlab.test_mesh()
 
 # Test import of plotting
-import img_pipe.plotting as plotting
-import img_pipe.SupplementalScripts
+import kimg_pipe.plotting as plotting
+import kimg_pipe.SupplementalScripts
