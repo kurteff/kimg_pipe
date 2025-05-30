@@ -1,11 +1,106 @@
-## `kimg_pipe` – kurteff's `img_pipe`
-This is a fork of the Chang Lab's [img_pipe](https://github.com/ChangLabUcsf/img_pipe). Details about the original pipeline are published in [_Frontiers in Neuroinformatics_](https://doi.org/10.3389/fninf.2017.00062). The tool is great, so great in fact that I've been using it pretty consistently for pretty much my entire scientific career at this point. I've made some modifications to the source code in my local copy and written a bunch of helper scripts, and (WIP!!) more recently I have expanded the package so it can parse ROSA data in a fashion similar to the MATLAB-based [VERA](https://github.com/neurotechcenter/VERA/). I maintain this fork for my own uses but if you find it useful, please let me know!
+## `kimg_pipe` – kurteff's `img_pipe` ##
+This is a fork of the Chang Lab's [img_pipe](https://github.com/ChangLabUcsf/img_pipe). Details about the original pipeline are published in [_Frontiers in Neuroinformatics_](https://doi.org/10.3389/fninf.2017.00062). The tool is great, so great in fact that I've been using it pretty consistently for pretty much my entire scientific career at this point. I've made some modifications to the source code in my local copy and written a bunch of helper scripts, and (WIP!!) more recently I have expanded the package so it can parse ROSA data in a fashion similar to the MATLAB-based [VERA](https://github.com/neurotechcenter/VERA/). I maintain this fork for my own uses and have no intent to publish any related content beyond what can be found in this repo, but if you find it useful, please let me know!
 
-Massive credit goes to Liberty Hamilton, an original `img_pipe` author and my PhD advisor. Even most of the "original" bits of code I've added in this fork she has had her hands in at some point. Other contributors from the Hamilton Lab to this repo in some form are Maansi Desai (PhD, now at Paradromics) and Alyssa Field (former Hamilton Lab RA). I'd also like to thank Markus Adamek, a contributor to VERA, for answering my questions via email and Mike Socha, a rep at Zimmer Bio, for answering my questions about how ROSA works via email and Zoom.
+Maintained/forked by Lynn Kurteff, laboratories of Greg Hickok, UC Irvine & Liberty Hamilton, UT Austin
+Email: lkurteff@uci.edu
+
+Massive credit goes to Liberty Hamilton, an original `img_pipe` author and my PhD advisor. Even most of the "original" bits of code I've added in this fork she has had her hands in at some point. Other contributors from the Hamilton Lab to this repo in some form are Maansi Desai (PhD, now at Paradromics) and Alyssa Field (former Hamilton Lab RA). I'd also like to thank Markus Adamek, a contributor to VERA, for answering my questions via email and Mike Socha, a rep at Zimmer Bio, for answering my questions about how ROSA works via email and Zoom. I have tried to provide credit where deserved in the docstrings.
+
+## Added features in `kimg_pipe`
+* Handy plotting and analysis shortcuts
+* Richer anatomical labeling
+* Support for inflated meshes
+* Standalone electrode picker (written by Liberty Hamilton)
+* BIDS-compliant JSON generation (written by Liberty Hamilton)
+* Animation rendering for presentations/supplements (written by Liberty Hamilton)
+
+### `utils.py` – a one-stop shop for helper functions ###
+This file contains a lot of helpful shortcuts for common analysis steps that I developed during my PhD work I will briefly describe the various top-down uses in this table:
+<table>
+    <tr>
+        <th width=400px> Functionality </th>
+        <th width=600px> Supporting Functions </th>
+    </tr>
+    <tr>
+        <td>Snap electrode to the surface of a mesh</td>
+        <td><pre lang="python">
+kimg_pipe.utils.nearest_electrode_vert()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Compute distance between electrode and cortical surface</td>
+        <td><pre lang="python">
+kimg_pipe.utils.calc_crtx_distance()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Return electrode subsets based on common inclusion criteria</td>
+        <td><pre lang="python">
+kimg_pipe.utils.clip_hem_elecs()
+kimg_pipe.utils.clip_4mm_elecs()
+kimg_pipe.utils.clip_roi_elecs()
+kimg_pipe.utils.clip_outside_brain_elecs()
+kimg_pipe.utils.pop_device()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Across-subject concatenation</td>
+        <td><pre lang="python">
+kimg_pipe.utils.cat_anat()
+kimg_pipe.utils.cat_elecs()</pre>       
+        </td>
+    </tr>
+    <tr>
+        <td>Pick electrode colors for use with el_add</td>
+        <td><pre lang="python">
+kimg_pipe.utils.color_by_roi()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Macro-anatomical labeling</td>
+        <td><pre lang="python">
+kimg_pipe.utils.condense_roi()
+kimg_pipe.utils.condense_roi_md()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Inflated surface generation and manipulation</td>
+        <td><pre lang="python">
+kimg_pipe.utils.convert_elecs_to_inflated()
+kimg_pipe.utils.load_curvature()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Shortcut parsers for freeCoG class and attributes</td>
+        <td><pre lang="python">
+kimg_pipe.utils.get_ch_names()
+kimg_pipe.utils.get_rois()
+kimg_pipe.utils.load_template_brain()</pre>
+        </td>
+    </tr>
+    <tr>
+        <td>Expanded vanilla plotting functions</td>
+        <td><pre lang="python">
+kimg_pipe.utils.plt_single_subject()
+kimg_pipe.utils.plt_single_insula()</pre>
+        </td>
+    </tr>
+</table> 
+
+## Planned functionality for `kimg_pipe`
+* Expanded `utils.py` functionality based on previously written but un-pushed spaghetti code _(partially implemented)_
+* Shortcuts for mapping variables to 1D/2D colormaps, then to electrodes _(partially implemented)_
+* Support for automatic electrode localization using Zimmer Bionet's ROSA surgical robot _(partially implemented)_
+* Custom atlas support _(partially implemented)_
+* Expanded BIDS utilities
+* [MRIcroGL](https://www.nitrc.org/projects/mricrogl) implementation
+* Better I/O with other commonly used Python neuroscience packages, such as the [NIPY](https://nipy.org/) package family and [ipyniivue](https://github.com/niivue/ipyniivue)
+
+***
 
 Below you will find the original readme that ships with img_pipe, which contains useful installation instructions among other handy resources:
 
-# Original `README.md`
+# Original `README.md` #
 ## ![alt text](https://github.com/ChangLabUcsf/img_pipe/raw/master/img_pipe/SupplementalScripts/icons/leftbrain_blackbg.png "img_pipe") img_pipe: Image processing pipeline for ECoG data ![alt text](https://github.com/ChangLabUcsf/img_pipe/raw/master/img_pipe/SupplementalScripts/icons/rightbrain_blackbg.png "img_pipe") ##
 
 [![Build Status](https://travis-ci.org/ChangLabUcsf/img_pipe.svg?branch=master)](https://travis-ci.org/ChangLabUcsf/img_pipe) [![PyPI version](https://badge.fury.io/py/img-pipe.svg)](https://badge.fury.io/py/img-pipe) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.996814.svg)](https://doi.org/10.5281/zenodo.996814)
