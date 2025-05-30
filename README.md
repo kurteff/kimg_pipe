@@ -2,6 +2,7 @@
 This is a fork of the Chang Lab's [img_pipe](https://github.com/ChangLabUcsf/img_pipe). Details about the original pipeline are published in [_Frontiers in Neuroinformatics_](https://doi.org/10.3389/fninf.2017.00062). The tool is great, so great in fact that I've been using it pretty consistently for pretty much my entire scientific career at this point. I've made some modifications to the source code in my local copy and written a bunch of helper scripts, and (WIP!!) more recently I have expanded the package so it can parse ROSA data in a fashion similar to the MATLAB-based [VERA](https://github.com/neurotechcenter/VERA/). I maintain this fork for my own uses and have no intent to publish any related content beyond what can be found in this repo, but if you find it useful, please let me know!
 
 Maintained/forked by Lynn Kurteff, laboratories of Greg Hickok, UC Irvine & Liberty Hamilton, UT Austin
+
 Email: lkurteff@uci.edu
 
 Massive credit goes to Liberty Hamilton, an original `img_pipe` author and my PhD advisor. Even most of the "original" bits of code I've added in this fork she has had her hands in at some point. Other contributors from the Hamilton Lab to this repo in some form are Maansi Desai (PhD, now at Paradromics) and Alyssa Field (former Hamilton Lab RA). I'd also like to thank Markus Adamek, a contributor to VERA, for answering my questions via email and Mike Socha, a rep at Zimmer Bio, for answering my questions about how ROSA works via email and Zoom. I have tried to provide credit where deserved in the docstrings.
