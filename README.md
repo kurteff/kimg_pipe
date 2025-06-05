@@ -90,7 +90,9 @@ kimg_pipe.utils.plt_single_insula()</pre>
 
 Oh yeah, I also expanded on the original workflow graphic to detail the changes in this fork:
 
-![alt text](https://github.com/ChangLabUcsf/img_pipe/raw/master/img_pipe/SupplementalFiles/kimg_workflow.png "kimg_pipe")
+![alt text](https://github.com/kurteff/kimg_pipe/blob/master/kimg_pipe/SupplementalFiles/kimg_workflow.png "kimg_pipe")
+
+
 
 _(Yellow-bordered steps are still WIP)_
 
