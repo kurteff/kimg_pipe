@@ -88,6 +88,12 @@ kimg_pipe.utils.plt_single_insula()</pre>
     </tr>
 </table> 
 
+Oh yeah, I also expanded on the original workflow graphic to detail the changes in this fork:
+
+![alt text](https://github.com/ChangLabUcsf/img_pipe/raw/master/img_pipe/SupplementalFiles/kimg_workflow.png "kimg_pipe")
+
+_(Yellow-bordered steps are still WIP)_
+
 ## Planned functionality for `kimg_pipe`
 * Expanded `utils.py` functionality based on previously written but un-pushed spaghetti code _(partially implemented)_
 * Shortcuts for mapping variables to 1D/2D colormaps, then to electrodes _(partially implemented)_
