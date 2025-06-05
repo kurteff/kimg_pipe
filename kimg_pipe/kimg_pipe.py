@@ -194,10 +194,13 @@ class freeCoG:
         # mri directory
         self.mri_dir = os.path.join(self.subj_dir, self.subj, 'mri')
 
+        # ROSA directory
+        self.rosa_dir = os.path.join(self.subj_dir, self.subj, 'rosa')
+
         # Check if subj is valid
         if not os.path.isdir(os.path.join(self.subj_dir, self.subj)):
             print('No such subject directory as %s' % (os.path.join(self.subj_dir, self.subj)))
-            ans = raw_input('Would you like to create a new subject directory? (y/N): ')
+            ans = input('Would you like to create a new subject directory? (y/N): ')
             if ans.upper() == 'Y' or ans.upper() == 'YES':
                 os.chdir(self.subj_dir)
                 print("Making subject directory")
@@ -342,6 +345,203 @@ class freeCoG:
                 print("Failed to create %s, check inputs."%(pial_fill_image))
         
         self.convert_fsmesh2mlab(mesh_name = 'dural')
+
+    # >>> ROSA FUNCTIONS – UNIQUE TO kimg_pipe
+    def prep_rosa(self):
+        '''
+        Prepares file directory structure of subj_dir for parsing ROSA data.
+        '''
+        if not os.path.isdir(self.rosa_dir):
+            print("Making ROSA directory, please put .ros and DICOM folder here")
+            os.mkdir(self.rosa_dir)
+        elif not os.path.isfile(os.path.join(self.rosa_dir, f'{self.subj}.ros')):
+            print(f'{self.subj}.ros not found, please add to {self.rosa_dir} before running patient.parse_ros().')
+        elif not os.path.isdir(os.path.join(self.rosa_dir, "DICOM")):
+            print(f'DICOM folder missing from {self.rosa_dir}.',
+                   'Please copy folder + contents from decrypted ROSA files before running patient.parse_ros().')
+
+    def parse_ros(self, ros_path=None):
+        '''
+        Parses a .ros file into a more readable format
+        Code heavily inspired by VERA's ParseROSAFile.m script.
+        '''
+        # Check that files required actually exist
+
+        if not os.path.isdir(self.rosa_dir):
+            raise FileNotFoundError(f'Invalid directory: {self.rosa_dir}. Please run patient.prep_rosa() and copy necessary files.')
+        if not os.path.isfile(os.path.join(self.rosa_dir, f'{self.subj}.ros')):
+            raise FileNotFoundError(f'{self.subj}.ros not found in {self.rosa_dir}. Please copy from decrypted ROSA files then re-run patient.parse_ros().')
+        if not os.path.isdir(os.path.join(self.rosa_dir, "DICOM")):
+            raise FileNotFoundError(f'DICOM folder missing from {self.rosa_dir}. Please copy folder + contents from decrypted ROSA files then re-run patient.parse_ros().')
+        if ros_path is None:
+            ros_path = os.path.join(self.rosa_dir, f"{self.subj}.ros")
+
+        # This transform is the same for all. ros files
+        self.rosa_affine = np.array([[-1., 0., 0., 0.],
+                                     [0., -1., 0., 0.],
+                                     [0., 0., 1., 0.],
+                                     [0., 0., 0., 1.]]) # rosadata.ATFormRAS
+        # Read .ros file
+        with open(ros_path, 'r') as f:
+            ros_txt = np.array(f.read().splitlines())
+
+        # Anonymize subject identifier, if not already deidentified
+        # – "fresh-off-the-robot" ROSA files contain PHI!
+        for ii in np.where(np.char.lower(ros_txt) == '[patient_name]')[0]:
+            phi_idx = ii+1
+            ros_txt[phi_idx] = self.subj
+        for ii in np.where(np.char.lower(ros_txt) == '[patient_birthday]')[0]:
+            phi_idx = ii+1
+            ros_txt[phi_idx] = '19010101' # 1/1/1901
+        # Save .ros, overwriting PHI with anonymized values
+        np.savetxt(ros_path, ros_txt, fmt="%s")
+
+        # Get image information (rosadata.displays)
+        self.rosa_displays = dict()
+        for ii in np.where(np.char.lower(ros_txt) == '[trdicomrdisplay]')[0]:
+            # Get filename and path for this image
+            display_idx = ii+4
+            display_name = ros_txt[display_idx].split("\\")[-1]
+            self.rosa_displays[display_name] = dict()
+            self.rosa_displays[display_name]['fpath'] = self.rosa_dir + "/" + "/".join(ros_txt[display_idx].split("\\")[1:]) + ".img"
+            # Get the affine (this doesn't line up with Nifti1Image.affine for some reason lmao)
+            affine_idx = ii+2
+            self.rosa_displays[display_name]['affine'] = np.array(ros_txt[affine_idx].split(" ")[:-1]).astype(float).reshape(4,4)
+
+        # Get device information (rosadata.Trajectories)
+        self.rosa_devices = dict()
+        traj_idxs = np.arange(ros_txt.shape[0])[np.isin(np.char.lower(ros_txt), ['[ellips]','[trajectory]'])]
+        for ii in traj_idxs:
+            traj_idx = ii+2
+            traj_str = ros_txt[traj_idx].split(" ")
+            device_name = traj_str[0]
+            self.rosa_devices[device_name] = dict()
+            self.rosa_devices[device_name]['start'] = np.array(traj_str[4:7]).astype(float)
+            self.rosa_devices[device_name]['end'] = np.array(traj_str[8:11]).astype(float)
+
+    def reg_rosa(self, T1_name=None):
+        '''
+        ROSA images are in Analyze/LAS by default.
+        Converts images to NIFTI/RAS and coregisters to the T1.
+
+        * T1_name: Name of ROSA .img that you would like to coregister to orig.mgz.
+                   If None, will try to infer from filenames in self.rosa_displays.keys()
+        '''
+        if T1_name is None:
+            T1_name = [k for k in self.rosa_displays.keys() if "T1" in k]
+            if len(T1_name) == 0:
+                raise ValueError("Could not automatically identify T1_name from ROSA dir. Please manually specify T1_name.")
+            elif len(T1_name) > 1:
+                print(f"WARNING: Multiple scans with 'T1' in filename found in ROSA dir. Will use {T1_name[0]}, if this is incorrect, please manually specify T1_name.")
+                T1_name = T1_name[0]
+            else:
+                T1_name = T1_name[0]
+        elif T1_name not in rosa_displays.keys():
+            raise ValueError(f"Invalid T1_name {T1_name} (missing from patient.rosa_displays.keys()).")
+        
+        print(f"Converting {self.rosa_displays[T1_name]['fpath']} from Analyze/LAS to NIFTI/RAS")
+        rosa_img = nib.load(self.rosa_displays[T1_name]['fpath'])
+
+        ## Convert LAS/Analyze to RAS/NIFTI
+        # Code in this block was heavily inspired by Markus Adamek's ROSATrajectoryExtraction script
+        nifti_dat = rosa_img.get_fdata()[:,:,:,0] # flatten last Analyze dimension – not used in NIFTI
+        analyze_hdr = rosa_img.header
+        voxel_sizes = analyze_hdr.get_zooms()
+        nifti_affine = np.diag(voxel_sizes[:3] + (1.,))
+        # shift image center (update translation)
+        analyze_dims = np.array(rosa_img.shape[:3])
+        nifti_affine[:3, 3] = -0.5 * analyze_dims * voxel_sizes[:3] # matlab: M
+        # Rotate out of LAS (update rotation)
+        rotation = np.eye(4)
+        rotation[:3, :3] = scipy.spatial.transform.Rotation.from_euler('xyz', [0., 0., np.pi]).as_matrix() # matlab: rot2ras
+        ros_affine = self.rosa_displays[T1_name]['affine'] # matlab: displays.ATForm
+        rot_affine = rotation @ ros_affine @ nifti_affine # matlab: t_out
+        # Save RAS NIFTI
+        nifti_hdr = nib.Nifti1Header()
+        nifti_hdr.set_sform(rot_affine, code=1)
+        nifti_hdr.set_qform(rot_affine, code=1)
+        for field in ['dim', 'pixdim', 'datatype', 'bitpix', 'vox_offset', 'cal_max', 'cal_min']:
+            if field in analyze_hdr:
+                nifti_hdr[field] = analyze_hdr[field]
+        nifti_hdr['intent_name'] = b'ROSATONI'
+        nifti_img = nib.Nifti1Image(nifti_dat, rot_affine, header=nifti_hdr)
+        if not os.path.isdir(os.path.join(self.rosa_dir, "mri")):
+            os.mkdir(os.path.join(self.rosa_dir, "mri"))
+        # T1.nii is not co-registered to orig.mgz yet (i.e., not ACPC-aligned)
+        outfile = os.path.join(self.rosa_dir, "mri", "T1.nii")
+        print(f"Saving RAS ROSA T1 image as {outfile}")
+        nib.save(nifti_img, outfile)
+
+        ## Co-register to orig.mgz
+        # Code for this block based off self.reg_img(), but more flexible (ie not just for CT co-reg)
+        # ISSUE: Is this AC-PC aligned?
+        source_file = os.path.join(self.rosa_dir, "mri", "T1.nii")
+        target_file = os.path.join(self.mri_dir, "orig.mgz")
+        print(f"Computing registration from {source_file} to {target_file}")
+        rosa_img = nipy.load_image(source_file)
+        mri_img = nipy.load_image(target_file)
+        rosa_cmap = rosa_img.coordmap
+        mri_cmap = mri_img.coordmap
+        # Compute registration
+        rosa_to_mri_reg = nipy.algorithms.registration.histogram_registration.HistogramRegistration(rosa_img, mri_img, similarity="nmi", smooth=0., interp='pv')
+        aff = rosa_to_mri_reg.optimize('rigid').as_affine()
+        rosa_to_mri = AffineTransform(rosa_cmap.function_range, mri_cmap.function_range, aff)
+        reg_rosa = nipy.algorithms.resample.resample(rosa_img, mri_cmap, rosa_to_mri.inverse(), mri_img.shape)
+        # Save NIFTI
+        outfile = os.path.join(self.rosa_dir, "mri", "rT1.nii")
+        print(f"Saving registered ROSA T1 image as {outfile}")
+        nipy.save_image(reg_rosa, outfile)
+
+    def clip_rosa2edf(self, data_dir=None):
+        '''
+        It is expected for the .ros file to contain more devices
+        than were actually implanted as it reflects plans, not actual
+        execution during surgery. To automatically prune un-implanted
+        devices, this function loads electrophysiological data from an
+        .edf file using MNE, then uses fuzzy string matching from the
+        .edf device names to the .ros's device names. Drops any unmatched
+        devices in the .ros file from memory so they won't be plotted in
+        self.project_rosa_electrodes().
+
+        **NOTE**: If your neural data are not stored in your subj_dir, please
+                  specify a path. Will use intelligent string matching to find
+                  .edf files containing self.subj in data_dir.
+        '''
+        ###
+        if data_dir is None:
+            data_dir = self.subj_dir
+        print(1)
+
+    def rosa_devices2ras(self):
+        '''
+        Applies the RAS transformation from self.convert_rosa2ras() to
+        all device trajectories in self.rosa_devices.
+        '''
+        rotation = scipy.spatial.transform.Rotation.from_euler('xyz', [0., 0., np.pi]).as_matrix()
+        affine_rotation = np.eye(4)
+        affine_rotation[:3, :3] = rotation # matlab: rot2ras
+        for device_name in self.rosa_devices.keys():
+            device_start = self.rosa_devices[device_name]['start']
+            device_end = self.rosa_devices[device_name]['end']
+            device_traj = np.vstack((device_start, device_end)) # traj_tosave
+            tr_traj = (affine_rotation @ device_traj.T).T
+            self.rosa_devices[device_name]['tr_start'] = tr_traj[0,:3]
+            self.rosa_devices[device_name]['tr_stop'] = tr_traj[1,:3]
+
+
+    def project_rosa_electrodes(self):
+        '''
+        Pre-registers ROSA electrodes on the electrode picker prior to
+        manual electrode localization. In theory, this is the payoff of
+        even loading ROSA data: decreasing the amount of manual work
+        required of electrode localization. After running this function,
+        ROSA devices will show up on the self.mark_electrodes() GUI and
+        can be quality-checked accordingly.
+        '''
+        ###
+        print(1)
+
+    # <<<
 
     def mark_electrodes(self):
         ''' Launch the electrode picker for this subject. The electrode
@@ -658,11 +858,11 @@ class freeCoG:
             # project the electrodes to the convex hull of the pial surface
             print('Projection direction vector: ', direction)
         else:
-            proj_direction = raw_input('Enter a custom projection direction as a string (lh,rh,top,bottom,front,back,or custom): If none provided, will default to hemisphere: \n')
+            proj_direction = input('Enter a custom projection direction as a string (lh,rh,top,bottom,front,back,or custom): If none provided, will default to hemisphere: \n')
             if proj_direction == 'custom':
-                x = raw_input('Enter projection vector\'s x-component: \n')
-                y = raw_input('Enter projection vector\'s y-component: \n')
-                z = raw_input('Enter projection vector\'s z-component: \n')
+                x = input('Enter projection vector\'s x-component: \n')
+                y = input('Enter projection vector\'s y-component: \n')
+                z = input('Enter projection vector\'s z-component: \n')
                 direction = [float(x),float(y),float(z)]
             elif proj_direction not in ['lh','rh','top','bottom','front','back','custom']:
                 direction = self.hem
@@ -973,26 +1173,26 @@ class freeCoG:
         else: #interactive
             done = False
             while done == False:
-                num_empty_rows = raw_input('Are you adding a row that will be NaN in the elecmatrix? If not, press enter. If so, enter the number of empty rows to add: \n')
+                num_empty_rows = input('Are you adding a row that will be NaN in the elecmatrix? If not, press enter. If so, enter the number of empty rows to add: \n')
                 if len(num_empty_rows):
                     num_empty_rows = int(num_empty_rows)
-                    short_name_prefix = raw_input('What is the short name prefix (e.g. G, AD, HD)?\n')
+                    short_name_prefix = input('What is the short name prefix (e.g. G, AD, HD)?\n')
                     short_names.extend([short_name_prefix for i in range(1,num_empty_rows+1)])
-                    long_name_prefix = raw_input('What is the long name prefix (e.g. L256Grid, HippocampalDepth)?\n')
+                    long_name_prefix = input('What is the long name prefix (e.g. L256Grid, HippocampalDepth)?\n')
                     long_names.extend([long_name_prefix for i in range(1,num_empty_rows+1)])
-                    elec_type = raw_input('What is the type of the device (e.g. grid, strip, depth)?\n')
+                    elec_type = input('What is the type of the device (e.g. grid, strip, depth)?\n')
                     elec_types.extend([elec_type for i in range(num_empty_rows)])
                     elecmatrix_all.append(np.ones((num_empty_rows,3))*np.nan)
                 else:
-                    short_name_prefix = raw_input('What is the short name prefix of the device (e.g. G, AD, HD)?\n')
-                    long_name_prefix = raw_input('What is the long name prefix of the device? (e.g. L256Grid, HippocampalDepth)\n')
-                    elec_type = raw_input('What is the type of the device? (e.g. grid, strip, depth)\n')     
+                    short_name_prefix = input('What is the short name prefix of the device (e.g. G, AD, HD)?\n')
+                    long_name_prefix = input('What is the long name prefix of the device? (e.g. L256Grid, HippocampalDepth)\n')
+                    elec_type = input('What is the type of the device? (e.g. grid, strip, depth)\n')     
                     try:
-                        file_name = raw_input('What is the filename of the device\'s electrode coordinate matrix?\n')
+                        file_name = input('What is the filename of the device\'s electrode coordinate matrix?\n')
                         indiv_file = os.path.join(self.elecs_dir,'individual_elecs', file_name)
                         elecmatrix = scipy.io.loadmat(indiv_file)['elecmatrix']
                     except IOError:
-                        file_name = raw_input('Sorry, that file was not found. Please enter the correct filename of the device: \n ')
+                        file_name = input('Sorry, that file was not found. Please enter the correct filename of the device: \n ')
                         indiv_file = os.path.join(self.elecs_dir,'individual_elecs', file_name)
                         elecmatrix = scipy.io.loadmat(indiv_file)['elecmatrix']
                     num_elecs = elecmatrix.shape[0]
@@ -1000,10 +1200,10 @@ class freeCoG:
                     short_names.extend([short_name_prefix+str(i) for i in range(1,num_elecs+1)])
                     long_names.extend([long_name_prefix+str(i) for i in range(1,num_elecs+1)])
                     elec_types.extend([elec_type for i in range(num_elecs)])
-                completed = raw_input('Finished entering devices? Enter \'y\' if finished.')
+                completed = input('Finished entering devices? Enter \'y\' if finished.')
                 if completed=='y':
                     done = True 
-            outfile = raw_input('What filename would you like to save out to?\n')
+            outfile = input('What filename would you like to save out to?\n')
         elecmatrix_all = np.vstack(elecmatrix_all)
         eleclabels = np.ones(elecmatrix_all.shape,dtype=np.object)
         eleclabels[:,0] = short_names
@@ -1265,7 +1465,7 @@ class freeCoG:
             LUT = [row.split() for row in LUT]
             lab = {}
             for row in LUT:
-                if len(row)>1 and row[0][0] is not '#' and row[0][0] is not '\\': # Get rid of the comments
+                if len(row)>1 and row[0][0] != '#' and row[0][0] != '\\': # Get rid of the comments
                     lname = row[1]
                     lab[np.int(row[0])] = lname
 
