@@ -18,16 +18,18 @@
 # Date Last Edited: May 29, 2025
 
 import os
+import re
 import glob
 import pickle
 import shutil
 import argparse
 import inspect
-
+from fuzzywuzzy import fuzz # Fuzzy string matching using Levenshtein distance
 import nibabel as nib
 from tqdm import tqdm
 
 import numpy as np
+import pandas as pd
 import scipy.io
 import scipy.spatial
 import matplotlib
@@ -44,6 +46,9 @@ import nipy.algorithms.registration.histogram_registration
 
 # For reading and unpacking binary files
 import struct
+
+# For reading neural data
+import mne
 
 from .plotting.mlab_3D_to_2D import get_world_to_view_matrix, get_view_to_display_matrix, apply_transform_to_points
 
@@ -474,7 +479,6 @@ class freeCoG:
 
         ## Co-register to orig.mgz
         # Code for this block based off self.reg_img(), but more flexible (ie not just for CT co-reg)
-        # ISSUE: Is this AC-PC aligned?
         source_file = os.path.join(self.rosa_dir, "mri", "T1.nii")
         target_file = os.path.join(self.mri_dir, "orig.mgz")
         print(f"Computing registration from {source_file} to {target_file}")
@@ -492,7 +496,7 @@ class freeCoG:
         print(f"Saving registered ROSA T1 image as {outfile}")
         nipy.save_image(reg_rosa, outfile)
 
-    def clip_rosa2edf(self, data_dir=None):
+    def clip_rosa2edf(self, data_dir=None, mode='edf', fuzz_thresh=70, clip_aggressive=False, return_pop=False):
         '''
         It is expected for the .ros file to contain more devices
         than were actually implanted as it reflects plans, not actual
@@ -503,14 +507,67 @@ class freeCoG:
         devices in the .ros file from memory so they won't be plotted in
         self.project_rosa_electrodes().
 
+        * Also supports reading channel names from a BIDS-compliant channels.tsv.
+        (set mode='tsv')
+        * fuzz_thresh: percent string match for a successful match in device name
+        * clip_aggressive: default False, if True will only choose a single device
+                           in the ROSA dict for each implanted device. Off by default
+                           because IMO, false positives are more useful than false
+                           negatives during electrode localization. Personal preference.
+        * return_pop: if True, returns list of dropped devices from self.rosa_devices
+
         **NOTE**: If your neural data are not stored in your subj_dir, please
                   specify a path. Will use intelligent string matching to find
                   .edf files containing self.subj in data_dir.
         '''
-        ###
         if data_dir is None:
             data_dir = self.subj_dir
-        print(1)
+        # sorry, this is such spaghetti code lol
+        files = [f for f in os.listdir(data_dir) if f.split(".")[-1] == mode]
+        if len(files) == 0:
+            raise ValueError(f"No .{mode} files located in {data_dir}.")
+        elif len(files) != 1:
+            fmatch = 'raw' if mode == 'edf' else 'channels'
+            fpath = [f for f in files if fmatch in f]
+            if len(fpath) == 0:
+                print(f"WARNING: No '{fmatch}' {mode} located in {data_dir}, instead loading channel info from {files[0]}")
+                fpath = os.path.join(data_dir, files[0])
+            else:
+                fpath = os.path.join(data_dir, fpath[0])
+        else:
+            fpath = os.path.join(data_dir, files[0])
+        if mode == 'edf':
+            print("Loading channel names from EDF...")
+            ch_names = mne.io.read_raw_edf(fpath, preload=False, verbose=False).info['ch_names']
+        elif mode == 'tsv':
+            print("Loading channel names from channels.tsv...")
+            ch_names = pd.read_csv(fpath, delimiter='\t')['name'].values
+        ch_names = [s.lower().replace("ref","").replace("pol ","") for s in ch_names]
+        # Strip channel names to get devices
+        devices = np.unique([re.sub(r'[^a-zA-Z]','',s) for s in ch_names])
+        # Get rosa device names
+        rosa_devices = [re.sub(r'[^a-zA-Z]','',s.lower()) for s in self.rosa_devices.keys()]
+        # Use fuzzy string matching to get the best candidate rosa name for each device
+        print(f"Matching {len(devices)} implanted devices to the {len(rosa_devices)} planned devices in ROSA...")
+        keep_devices = []
+        for d in devices:
+            matches = np.array([fuzz.ratio(d,rd) for rd in rosa_devices])
+            if matches.max() > fuzz_thresh:
+                top_rosa_idxs = np.arange(len(rosa_devices))[np.where(matches==matches.max())[0]]
+                if len(top_rosa_idxs) > 1 and clip_aggressive:
+                    # Only keep 0th device
+                    keep_devices.append(top_rosa_idxs[0])
+                else:
+                    for ii in top_rosa_idxs:
+                        if ii not in keep_devices:
+                            keep_devices.append(ii)
+        # Drop other devices from self.rosa_devices
+        rm_devices = [k for ii,k in enumerate(self.rosa_devices.keys()) if ii not in keep_devices]
+        print(f"Removing {len(rm_devices)} devices from patient.rosa_devices ...")
+        for k in rm_devices:
+            self.rosa_devices.pop(k)
+        if return_pop:
+            return rm_devices
 
     def rosa_devices2ras(self):
         '''
