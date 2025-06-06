@@ -4,7 +4,7 @@
 # 
 
 import matplotlib
-matplotlib.use('Qt4Agg') 
+matplotlib.use('Qt5Agg') 
 matplotlib.rcParams['toolbar'] = 'None'
 from pyface.qt import QtGui, QtCore
 from matplotlib import pyplot as plt
@@ -24,8 +24,9 @@ import matplotlib.patches as mpatches
 import scipy.io
 import os
 import warnings
-from PyQt4.QtGui import *
-from PyQt4.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
 from matplotlib.widgets import Slider
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -263,7 +264,7 @@ class electrode_picker:
         # Plot sagittal, coronal, and axial views 
         for i in np.arange(3):
             self.ax.append(self.fig.add_subplot(2,2,i+1))
-            self.ax[i].set_axis_bgcolor('k')
+            self.ax[i].set_facecolor('k')
             if i==0:
                 imdata = img_data[cs[0],:,:].T
                 ctdat  = ct_data[cs[0],:,:].T
@@ -313,7 +314,7 @@ class electrode_picker:
         # Plot the maximum intensity projection
         self.ct_slice = 's' # Show sagittal MIP to start
         self.ax.append(self.fig.add_subplot(2,2,4))
-        self.ax[3].set_axis_bgcolor('k')
+        self.ax[3].set_facecolor('k')
         self.im.append(plt.imshow(np.nanmax(ct_data[cs[0]-15:cs[0]+15,:,:], axis=0).T, cmap=cm.gray, aspect='auto'))
         self.cursor.append(plt.plot([cs[1], cs[1]], [self.ax[3].get_ylim()[0]+1, self.ax[3].get_ylim()[1]-1], color=[0, 1, 0] ))
         self.cursor2.append(plt.plot([self.ax[3].get_xlim()[0]+1, self.ax[3].get_xlim()[1]-1], [cs[2], cs[2]], color=[0, 1, 0] ))
@@ -341,7 +342,7 @@ class electrode_picker:
         ct_slider_ax = plt.axes([self.ax[1].get_position().bounds[0]+0.06, 
                       self.ax[1].get_position().bounds[1]+0.42, 
                       self.ax[1].get_position().bounds[2]-0.1, 0.02])
-        print(np.nanmax(ct_data))
+        # print('nanmax ct data:', np.nanmax(ct_data))
         self.ct_slider = Slider(ct_slider_ax, 'CT max', 1000, np.nanmax(ct_data), facecolor=[0.8, 0.1, 0.1])
         self.ct_slider.on_changed(self.update_ct)
 
@@ -366,7 +367,7 @@ class electrode_picker:
         pagedown/pageup: move by one slice in currently selected pane
         arrow up/arrow down: pan by one voxel in currently selected pane
         '''
-        #print('You pressed', event.key)
+        print('You pressed', event.key)
         bb1=self.ax[0].get_position()
         bb2=self.ax[1].get_position()
         bb3=self.ax[2].get_position()
@@ -423,6 +424,7 @@ class electrode_picker:
                 self.elec_num[self.device_name] = 0
                 elecfile = os.path.join(self.subj_dir, 'elecs', 'individual_elecs', self.device_name+'.mat')
                 if os.path.isfile(elecfile):
+                    print(f"Elecfile found: {elecfile}")
                     emat = scipy.io.loadmat(elecfile)['elecmatrix']
                     self.elecmatrix[self.device_name] = list(emat)
                     print("Loading %s (if you wish to overwrite, remove this file before running)"%(elecfile))
@@ -523,7 +525,7 @@ class electrode_picker:
         view on MRI and CT views.
         '''
 
-        #print('You scrolled %d steps at x: %d, y: %d', event.step, event.x, event.y)
+        # print('You scrolled %d steps at x: %d, y: %d', event.step, event.x, event.y)
         # Get the bounding box for each of the subplots
         bb1=self.ax[0].get_position()
         bb2=self.ax[1].get_position()
@@ -743,8 +745,8 @@ class electrode_picker:
         
         self.elec_num[self.device_name] += 1
         self.elec_added = True
-        #print("Voxel CRS: %3.3f, %3.3f, %3.3f"%(self.current_slice[0], self.current_slice[1], self.current_slice[2]))
-        #print("RAS coordinate: %3.3f, %3.3f, %3.3f"%(elec[0], elec[1], elec[2]))
+        print("Voxel CRS: %3.3f, %3.3f, %3.3f"%(self.current_slice[0], self.current_slice[1], self.current_slice[2]))
+        print("RAS coordinate: %3.3f, %3.3f, %3.3f"%(elec[0], elec[1], elec[2]))
 
     def remove_electrode(self):
         '''

@@ -25,6 +25,7 @@ import shutil
 import argparse
 import inspect
 from fuzzywuzzy import fuzz # Fuzzy string matching using Levenshtein distance
+
 import nibabel as nib
 from tqdm import tqdm
 
@@ -51,6 +52,7 @@ import struct
 import mne
 
 from .plotting.mlab_3D_to_2D import get_world_to_view_matrix, get_view_to_display_matrix, apply_transform_to_points
+from .SupplementalFiles import FS_colorLUT
 
 # For animations, from pycortex
 linear = lambda x, y, m: (1.-m)*x + m*y
@@ -219,14 +221,20 @@ class freeCoG:
             else:
                 raise NameError('No such subject directory as %s' % (os.path.join(subj_dir, subj)))
 
+        members = [attr for attr in dir(self) if not callable(getattr(self, attr)) and not attr.startswith("__")]
+        self.info = dict()
+        for m in members:
+            self.info[m] = getattr(self, m)
+
         #if paths are not the default paths in the shell environment:
         os.environ['FREESURFER_HOME'] = fs_dir
         os.environ['SUBJECTS_DIR'] = subj_dir
 
-    def prep_recon(self):
+    def prep_recon(self, rosa=False):
         '''Prepares file directory structure of subj_dir, copies acpc-aligned               
         T1.nii to the 'orig' directory and converts to mgz format.
-
+        Set rosa=True to also prepare file directory structure for preprocessing
+        ROSA surgical robot files.
         '''       
 
         # navigate to directory with subject freesurfer folders           
@@ -252,6 +260,19 @@ class freeCoG:
         T1_file2 = os.path.join(orig_dir, 'T1.nii')
         T1_mgz = os.path.join(orig_dir, '001.mgz')
         os.system('mri_convert %s %s'%(T1_file2, T1_mgz))
+
+        if rosa:
+            if not os.path.isdir(self.rosa_dir):
+                print("Making ROSA directory, please put .ros and DICOM folder here")
+                os.mkdir(self.rosa_dir)
+            elif not os.path.isfile(os.path.join(self.rosa_dir, f'{self.subj}.ros')):
+                print(f'{self.subj}.ros not found, please add to {self.rosa_dir} before running patient.parse_ros().')
+            elif not os.path.isdir(os.path.join(self.rosa_dir, "DICOM")):
+                print(f'DICOM folder missing from {self.rosa_dir}.',
+                       'Please copy folder + contents from decrypted ROSA files before running patient.parse_ros().')
+            if not os.path.isdir(os.path.join(self.elecs_dir,"rosa")):
+                os.mkdir(os.path.join(self.elecs_dir,"rosa"))
+
 
     def get_recon(self, flag_T3 = '-3T', openmp_flag='-openmp 12', gpu_flag=''):        
         '''Runs freesurfer recon-all for surface reconstruction.                
@@ -352,19 +373,6 @@ class freeCoG:
         self.convert_fsmesh2mlab(mesh_name = 'dural')
 
     # >>> ROSA FUNCTIONS – UNIQUE TO kimg_pipe
-    def prep_rosa(self):
-        '''
-        Prepares file directory structure of subj_dir for parsing ROSA data.
-        '''
-        if not os.path.isdir(self.rosa_dir):
-            print("Making ROSA directory, please put .ros and DICOM folder here")
-            os.mkdir(self.rosa_dir)
-        elif not os.path.isfile(os.path.join(self.rosa_dir, f'{self.subj}.ros')):
-            print(f'{self.subj}.ros not found, please add to {self.rosa_dir} before running patient.parse_ros().')
-        elif not os.path.isdir(os.path.join(self.rosa_dir, "DICOM")):
-            print(f'DICOM folder missing from {self.rosa_dir}.',
-                   'Please copy folder + contents from decrypted ROSA files before running patient.parse_ros().')
-
     def parse_ros(self, ros_path=None):
         '''
         Parses a .ros file into a more readable format
@@ -424,7 +432,7 @@ class freeCoG:
             self.rosa_devices[device_name]['start'] = np.array(traj_str[4:7]).astype(float)
             self.rosa_devices[device_name]['end'] = np.array(traj_str[8:11]).astype(float)
 
-    def reg_rosa(self, T1_name=None):
+    def reg_rosa_img(self, T1_name=None):
         '''
         ROSA images are in Analyze/LAS by default.
         Converts images to NIFTI/RAS and coregisters to the T1.
@@ -495,6 +503,118 @@ class freeCoG:
         outfile = os.path.join(self.rosa_dir, "mri", "rT1.nii")
         print(f"Saving registered ROSA T1 image as {outfile}")
         nipy.save_image(reg_rosa, outfile)
+
+    def reg_rosa_devices(self):
+        '''
+        Converts device trajectories from LAS to RAS and coregisters to the T1
+        Converts images to NIFTI/RAS and coregisters to the T1.
+
+        TODO: Add interpolation based on number of contacts on device (inferred from self.clip_rosa2edf() or smth).
+        '''
+        
+        ## Set up directories and check for prerequisite files
+        if not os.path.isdir(os.path.join(self.rosa_dir, "mri", "Trajectories")):
+            # Un-coregistered trajectory images will be saved here:
+            os.mkdir(os.path.join(self.rosa_dir, "mri", "Trajectories"))
+        if not os.path.isdir(os.path.join(self.rosa_dir, "mri", "rTrajectories")):
+            # Coregistered trajectory images will be saved here:
+            os.mkdir(os.path.join(self.rosa_dir, "mri", "rTrajectories"))
+        # Lastly, coregistered trajectory images will be converted to .mat files and saved here:
+        rosa_elecs_dir = os.path.join(self.elecs_dir,"rosa")
+        # Make sure T1 has been coregistered already in patient.reg_rosa_img()
+        target_file = os.path.join(self.rosa_dir, "mri", "rT1.nii")
+        if not os.path.isfile(target_file):
+            raise Exception(f"rT1.nii missing from {self.rosa_dir}/mri/. Please run patient.reg_rosa_img() first.")
+        t1_img = nib.load(target_file)
+        t1_affine = t1_img.affine
+        t1_affine_inv = np.linalg.inv(t1_affine)
+
+        for device_name in self.rosa_devices.keys():
+        ## Rotate out of LAS (update rotation)
+            rotation = np.eye(4)
+            rotation[:3, :3] = scipy.spatial.transform.Rotation.from_euler('xyz', [0., 0., np.pi]).as_matrix() # matlab: rot2ras
+            device_start = self.rosa_devices[device_name]['start']
+            device_end = self.rosa_devices[device_name]['end']
+            device_traj = np.vstack((np.hstack(([device_start,1.])), np.hstack(([device_end,1.])))) # traj_tosave
+            rot_traj = np.array(device_traj @ rotation)
+            # self.rosa_devices[device_name]['rot_start'] = tr_traj[0,:3]
+            # self.rosa_devices[device_name]['rot_stop'] = tr_traj[1,:3]
+
+        ## Save to NIFTI in rosa_dir/mri/Trajectories
+            traj_dat = np.zeros(t1_img.shape)
+            start_vx = np.round(t1_affine_inv @ rot_traj[0,:]).astype(int)[:3] # :3
+            end_vx = np.round(t1_affine_inv @ rot_traj[1,:]).astype(int)[:3]
+            device_pts = interp_line(start_vx, end_vx, n_points=2) # TO DO: More flexible n_points
+            for pt in device_pts:
+                x,y,z = pt
+                # This should throw an error if the dimensions of something or another are off just fyi
+                traj_dat[x,y,z] = 1.
+            traj_img = nib.Nifti1Image(traj_dat, t1_affine, header=t1_img.header)
+            outfile = os.path.join(self.rosa_dir, "mri", "Trajectories", f"{device_name}.nii")
+            print(f"Saving un-coregistered trajectory for {device_name} as {outfile}")
+            nib.save(traj_img, outfile)
+
+        ## Co-register to orig.mgz
+        # Code for this block based off self.reg_img()
+            # Reload trajectory/T1 with nipy to get the coordmap
+            source_file = outfile
+            traj_img = nipy.load_image(source_file)
+            mri_img = nipy.load_image(target_file)
+            traj_cmap = traj_img.coordmap
+            mri_cmap = mri_img.coordmap
+            # Compute registration
+            traj_to_mri_reg = nipy.algorithms.registration.histogram_registration.HistogramRegistration(traj_img, mri_img, similarity="nmi", smooth=0., interp="pv")
+            aff = traj_to_mri_reg.optimize('rigid').as_affine()
+            traj_to_mri = AffineTransform(traj_cmap.function_range, mri_cmap.function_range, aff)
+            reg_traj = nipy.algorithms.resample.resample(traj_img, mri_cmap, traj_to_mri.inverse(), mri_img.shape)
+            # Re-binarize data as we get these weird non-1 floats after resampling
+            arr = reg_traj.get_data()
+            arr[arr > 0.5] = 1. # 0.5 is kind of arbitrary but whatever, it works
+            arr[arr < 0.5] = 0.
+            cmap = reg_traj.coordmap
+            traj_img = nipy.core.image.image.Image(arr, cmap)
+            # Save NIFTI in rosa_dir/mri/rTrajectories
+            outfile = os.path.join(self.rosa_dir, "mri", "rTrajectories", f"{device_name}.nii")
+            print(f"Saving coregistered trajectory for {device_name} as {outfile}")
+            nipy.save_image(traj_img, outfile)
+
+        ## Save to .mat file in rosa_elecs_dir 
+        # Code for this block is based off bits of SupplementalScripts/electrode_picker.py
+            elecfile = os.path.join(rosa_elecs_dir, f"{device_name}.mat")
+            elecmatrix = [] # This will be the electrode coordinates
+            # Apply orientation to the image so that the order of the dimensions will be
+            # sagittal, coronal, axial
+            codes = nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(traj_img.affine))
+            img_data = nib.orientations.apply_orientation(traj_img.get_data(), codes)
+            nx, ny, nz = np.array(img_data.shape, dtype='float')
+            # Reshape image dimensions to imsz (if necessary)
+            imsz = (256,256,256) # these are the image dimensions used in electrode_picker
+            if img_data.shape != imsz:
+                # print("Resizing voxels in trajectory image")
+                img_data = scipy.ndimage.zoom(img_data, [imsz[0]/nx, imsz[1]/ny, imsz[2]/nz])
+                # print(img_data.shape)
+
+            # DO WE NEED TO LOAD THE PIAL FILL HERE? I DON'T THINK SO
+
+            # Convert elec to RAS MNI coordinate (AC at 0,0,0)
+            n_elecs = np.where(img_data==1)[0].shape[0]
+            print(f"Found {n_elecs} elecs for {device_name}")
+            for ii in np.arange(n_elecs):
+                # Get CRS coordinate
+                coord = np.array(np.where(img_data==1))[:,ii]
+                elec_CRS = np.hstack((imsz[0] - coord[0] - 1.,
+                                      imsz[2] - coord[2] -1.,
+                                      coord[1], 1))
+                # Convert CRS to RAS
+                fsVox2RAS = np.array(
+                    [[-1., 0., 0., 128.], [0., 0., 1., -128.], [0., -1., 0., 128.], [0., 0., 0., 1.]])
+                elec = np.dot(fsVox2RAS, elec_CRS.transpose()).transpose().astype(float)
+                print(elec)
+                elecmatrix.append(elec[:3])
+            
+            # Save list of elecs to file in rosa_elecs_dir
+            print(f"Saving {device_name}.mat to {rosa_elecs_dir}")
+            scipy.io.savemat(elecfile, {'elecmatrix': np.array(elecmatrix,dtype='float')})
 
     def clip_rosa2edf(self, data_dir=None, mode='edf', fuzz_thresh=70, clip_aggressive=False, return_pop=False):
         '''
@@ -568,23 +688,6 @@ class freeCoG:
             self.rosa_devices.pop(k)
         if return_pop:
             return rm_devices
-
-    def rosa_devices2ras(self):
-        '''
-        Applies the RAS transformation from self.convert_rosa2ras() to
-        all device trajectories in self.rosa_devices.
-        '''
-        rotation = scipy.spatial.transform.Rotation.from_euler('xyz', [0., 0., np.pi]).as_matrix()
-        affine_rotation = np.eye(4)
-        affine_rotation[:3, :3] = rotation # matlab: rot2ras
-        for device_name in self.rosa_devices.keys():
-            device_start = self.rosa_devices[device_name]['start']
-            device_end = self.rosa_devices[device_name]['end']
-            device_traj = np.vstack((device_start, device_end)) # traj_tosave
-            tr_traj = (affine_rotation @ device_traj.T).T
-            self.rosa_devices[device_name]['tr_start'] = tr_traj[0,:3]
-            self.rosa_devices[device_name]['tr_stop'] = tr_traj[1,:3]
-
 
     def project_rosa_electrodes(self):
         '''
@@ -3196,6 +3299,23 @@ class freeCoG:
 
 
 # Functions #
+
+def interp_line(start, end, n_points=2):
+    '''
+    Given a start voxel (CRS) and end voxel (CRS) in an image,
+    draws a line between the two points with the same image
+    dimensions that contains n_points (n_points=2 would only draw
+    start and end points). (Hopefully) useful for interpolating
+    depth electrodes along a device.
+
+    Returns voxel indices as integers
+    '''
+    start = np.asarray(start, dtype=float)
+    end = np.asarray(end, dtype=float)
+    line = np.linspace(0, 1, n_points)
+    line_points = np.array([np.round((1-pt) * start + pt * end).astype(int) for pt in line])
+
+    return line_points
 
 def remove_whitespace(brain_image):
     '''
