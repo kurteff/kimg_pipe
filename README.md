@@ -86,20 +86,34 @@ kimg_pipe.utils.plt_single_subject()
 kimg_pipe.utils.plt_single_insula()</pre>
         </td>
     </tr>
-</table> 
+</table>
 
-Oh yeah, I also expanded on the original workflow graphic to detail the changes in this fork:
+### ROSA support
+This is the main reason I forked `img_pipe` – the hospital I work with now uses a ROSA surgical robot for sEEG depth implantation. Surgical arm trajectories are saved to a plaintext `.ros` file which, with a little finesse, can be translated to the start and endpoint of an individual sEEG depth. The only other software I know of that has this functionality is [VERA](https://github.com/neurotechcenter/VERA/), a great piece of tech but I just hate MATLAB too much to use it. So, instead, here's how it's done in `kimg_pipe`:
 
+1. Initialize your patient in `kimg_pipe` and complete your other bog-standard first steps (T1 alignment to AC-PC, CT alignment).
+2. Get the encrypted files directly from the ROSA machine and decrypt them – you should have a folder that contains a `.ros` file and a subfolder named `DICOM` that contains a bunch of images. Rename the `.ros` file so it's deidentified – the default name contains PHI.
+3. Run `patient.prep_recon(rosa=True)` to generate the necessary subfolders.
+4. Move the decrypted ROSA files to their respective subfolders, located in `subj_dir/subj/rosa/`.
+5. Get information from the `.ros` file about device trajectories and the images used by ROSA via `patient.parse_ros()`. This will also remove all PHI from the `.ros` file.
+6. (Optional) If you have neural data (an `.edf` or a BIDS-compliant `channels.tsv`, you can run `patient.clip_rosa2edf()` in an attempt to automatically remove any devices from the `.ros` file that weren't actually implanted (`.ros` files contain _plans_ for surgery, not a log of what was actually implanted).
+7. Co-register the T1 used by ROSA to `/mri/orig.mgz` by running `patient.reg_rosa_img()`.
+8. Co-register the device trajectories similarly and also generate `.mat` files for the devices via `patient.reg_rosa_devices()`.
+9. Complete other standard preprocessing steps before electrode localization (co-register CT, generate/quality check the recons.
+10. Open the electrode picker GUI via `patient.mark_electrodes(rosa=True)` – using that argument will automatically load the rosa device trajectories as electrodes in the GUI before you begin marking.
+11. Use the ROSA trajectories to (ideally) make the manual process of electrode marking easier!
+12. Complete all other steps of `kimg_pipe` as otherwise intended.
+
+### Workflow
 ![alt text](https://github.com/kurteff/kimg_pipe/blob/master/kimg_pipe/SupplementalFiles/kimg_workflow.png "kimg_pipe")
-
-
 
 _(Yellow-bordered steps are still WIP)_
 
 ## Planned functionality for `kimg_pipe`
+* Support for semi-automatic electrode localization using Zimmer Bionet's ROSA surgical robot _(mostly implemented)_
+* Rewrite 3D visualization to use pyvista over Mayavi (written by Liberty Hamilton) _(code complete, porting WIP by me)_
 * Expanded `utils.py` functionality based on previously written but un-pushed spaghetti code _(partially implemented)_
 * Shortcuts for mapping variables to 1D/2D colormaps, then to electrodes _(partially implemented)_
-* Support for automatic electrode localization using Zimmer Bionet's ROSA surgical robot _(partially implemented)_
 * Custom atlas support _(partially implemented)_
 * Expanded BIDS utilities
 * [MRIcroGL](https://www.nitrc.org/projects/mricrogl) implementation
