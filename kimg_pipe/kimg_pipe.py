@@ -688,28 +688,22 @@ class freeCoG:
             self.rosa_devices.pop(k)
         if return_pop:
             return rm_devices
-
-    def project_rosa_electrodes(self):
-        '''
-        Pre-registers ROSA electrodes on the electrode picker prior to
-        manual electrode localization. In theory, this is the payoff of
-        even loading ROSA data: decreasing the amount of manual work
-        required of electrode localization. After running this function,
-        ROSA devices will show up on the self.mark_electrodes() GUI and
-        can be quality-checked accordingly.
-        '''
-        ###
-        print(1)
-
     # <<<
 
-    def mark_electrodes(self):
+    def mark_electrodes(self, rosa=False):
         ''' Launch the electrode picker for this subject. The electrode
         picker requires the Qt4Agg backend, so is launched via an external
         python script. 
 
         Inputs to the electrode_picker.py script include the subject directory and the hemisphere
         of implantation.
+
+        * Setting rosa=True pre-registers ROSA electrodes on the electrode
+        picker prior to manual electrode localization. In theory, this
+        is the payoff of loading ROSA data: decreasing the amount of
+        manual work required of electrode localization. ROSA devices
+        will show up on the self.mark_electrodes() GUI and can be
+        quality-checked accordingly.
         '''
         individual_elecs_dir = os.path.join(self.subj_dir,self.subj,'elecs','individual_elecs')
         if not os.path.isdir(individual_elecs_dir):
@@ -717,7 +711,84 @@ class freeCoG:
             os.mkdir(individual_elecs_dir)
         print("Launching electrode picker")
         epicker = os.path.join(self.kimg_pipe_dir, 'SupplementalScripts', 'electrode_picker.py')
-        os.system('python %s %s %s'%(epicker, os.path.join(self.subj_dir, self.subj), self.hem))
+        os.system('python %s %s %s %s'%(epicker, os.path.join(self.subj_dir, self.subj), self.hem, rosa))
+
+    # >>> ADDITIONAL FREEVIEW ELECTRODE MARKING FUNCTIONALITY
+    def interp_depth(self, tkras_start, tkras_end, num_elecs, add_to_file=False, device_name=None, fsdat=False):
+        '''
+        Basically a wrapper for interp_line() that can save to a .mat file.
+        Given a start/end point in brain.mgz TkRAS coordinates and number of elecs
+        on the device, generates evenly spaced points along the line between start/end.
+
+        * add_to_file: if True, creates a .mat file for this device in self.subj_dir/elecs/individual_elecs
+        * device_name: Necessary when add_to_file == True.
+        * fsdat: if True, also saves the depth interpolation as a freeview points .dat file. Only works if
+                 add_to_file == True
+        '''
+        elecmatrix = interp_line(tkras_start, tkras_end, n_points=num_elecs, as_integer=False)
+        if add_to_file:
+            if device_name is None:
+                raise ValueError("No device_name specified (cannot save to file unless passed).")
+            elecfile = os.path.join(self.elecs_dir, 'individual_elecs', device_name+'.mat')
+            scipy.io.savemat(elecfile, {'elecmatrix': np.array(elecmatrix)})
+            if fsdat:
+                self.convert_elecmat2fsdat(device_name=device_name)
+        return elecmatrix
+
+    def convert_elecmat2fsdat(self, convert_all=False, device_name=None, rosa=False):
+        '''
+        Takes an elecmatrix from self.subj_dir/elecs and converts it to a
+        freeview-compatible points.dat file.
+        These are saved to self.subj_dir/elecs/fsdat/.
+
+        * The two main modes are:
+            1. Simply convert all elecs in TDT_elecs_all.mat (convert_all=True);
+            2. Convert a given device in elecs/individual_elecs (device_name="fname")
+        * if rosa == True, will look for individual devices in self.subj_dir/elecs/rosa/.
+
+        TO IMPLEMENT: If open_freeview == True, opens T1 + CT + freshly created points.dat
+                      file in freeview once file is created.
+        '''
+        dat_file = ["\n"] # append lines to write here; fsdat files all have a blank header for some reason
+        # Check that a logical mode was passed
+        if not convert_all and device_name is None:
+            raise ValueError("Must specify either convert_all=True or pass a device_name.")
+        elif convert_all:
+            # Convert all elecs in TDT_elecs_all.mat
+            elecmat = self.elecs_dir + "/" + "TDT_elecs_all.mat"
+            if not os.path.isfile(elecmat):
+                raise FileNotFoundError("TDT_elecs_all.mat has not been created yet.")
+        elif device_name is not None:
+            elec_folder = os.path.join(self.elecs_dir, 'rosa') if rosa else os.path.join(self.elecs_dir,'individual_elecs')
+            elecmat = elec_folder + '/' + device_name + '.mat'
+            if not os.path.isfile(elecmat):
+                raise FileNotFoundError(f"{elecmat} does not exist")
+        # Populate dat_file
+        e = scipy.io.loadmat(elecmat)
+        elecmatrix = e['elecmatrix']
+        for elec in elecmatrix:
+            r,a,s = elec
+            dat_file.append("%.4f     %.4f       %.4f\n" % (r,a,s))
+        # Write footer
+        dat_file.append("info \n")
+        dat_file.append(f"numpoints {len(elecmatrix)}\n")
+        dat_file.append("useRealRAS 0") # we want TkRAS not scanner coordinates
+        fsdat_folder = self.elecs_dir + '/' + 'fsdat'
+        if not os.path.isdir(fsdat_folder):
+            os.mkdir(fsdat_folder)
+        outfile = fsdat_folder + '/' + 'TDT_elecs_all.dat' if convert_all else fsdat_folder + '/' + device_name + '.dat'
+        with open(outfile, 'w') as f:
+            f.writelines(dat_file)
+        # Open .dat in freeview if open_freeview
+        # I HAVE NO CLUE WHY THIS DOES NOT WORK.
+        # if open_freeview:
+        #     print("Launching freeview")
+        #     brain_mri = os.path.join(self.subj_dir, self.subj, 'mri', 'brain.mgz')
+        #     lh_pial = os.path.join(self.subj_dir, self.subj, 'surf', 'lh.pial')
+        #     rh_pial = os.path.join(self.subj_dir, self.subj, 'surf', 'rh.pial')
+        #     ct_fpath = os.path.join(self.subj_dir, self.subj, 'CT', 'rCT.nii')
+        #     os.system("freeview --volume %s --surface %s --surface %s --surface %s --viewport 'coronal' --control-points %s" % (
+        #         brain_mri, lh_pial, rh_pial, ct_fpath, outfile))
 
     def convert_fsmesh2mlab(self, mesh_name='pial'):
         '''Creates surface mesh triangle and vertex .mat files
@@ -3300,7 +3371,7 @@ class freeCoG:
 
 # Functions #
 
-def interp_line(start, end, n_points=2):
+def interp_line(start, end, n_points=2, as_integer=True):
     '''
     Given a start voxel (CRS) and end voxel (CRS) in an image,
     draws a line between the two points with the same image
@@ -3313,7 +3384,10 @@ def interp_line(start, end, n_points=2):
     start = np.asarray(start, dtype=float)
     end = np.asarray(end, dtype=float)
     line = np.linspace(0, 1, n_points)
-    line_points = np.array([np.round((1-pt) * start + pt * end).astype(int) for pt in line])
+    if as_integer:
+        line_points = np.array([np.round((1-pt) * start + pt * end).astype(int) for pt in line])
+    else:
+        line_points = np.array([((1-pt) * start + pt * end).astype(float) for pt in line])
 
     return line_points
 
