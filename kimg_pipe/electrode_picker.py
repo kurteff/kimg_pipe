@@ -183,7 +183,7 @@ class electrode_picker:
         # Apply orientation to the MRI so that the order of the dimensions will be
         # sagittal, coronal, axial
         self.codes = nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(self.affine))
-        img_data = nib.orientations.apply_orientation(self.img.get_data(), self.codes)
+        img_data = nib.orientations.apply_orientation(self.img.fget_data(), self.codes)
         self.voxel_sizes = nib.affines.voxel_sizes(self.affine)
         nx,ny,nz = np.array(img_data.shape, dtype='float')
 
@@ -192,13 +192,13 @@ class electrode_picker:
 
         # Apply orientation to pial surface fill
         self.pial_codes = nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(self.pial_img.affine))
-        pial_data = nib.orientations.apply_orientation(self.pial_img.get_data(), self.pial_codes)
+        pial_data = nib.orientations.apply_orientation(self.pial_img.fget_data(), self.pial_codes)
         pial_data = scipy.ndimage.binary_closing(pial_data)
 
         # Apply orientation to the CT so that the order of the dimensions will be
         # sagittal, coronal, axial
         self.ct_codes =nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(self.ct.affine))
-        ct_data = nib.orientations.apply_orientation(self.ct.get_data(), self.ct_codes)
+        ct_data = nib.orientations.apply_orientation(self.ct.fget_data(), self.ct_codes)
 
         cx,cy,cz=np.array(ct_data.shape, dtype='float')       
 

@@ -504,7 +504,7 @@ class freeCoG:
         print(f"Saving registered ROSA T1 image as {outfile}")
         nipy.save_image(reg_rosa, outfile)
 
-    def reg_rosa_devices(self):
+    def reg_rosa_devices(self, devices=[]): # , n_points=[]
         '''
         Converts device trajectories from LAS to RAS and coregisters to the T1
         Converts images to NIFTI/RAS and coregisters to the T1.
@@ -529,7 +529,9 @@ class freeCoG:
         t1_affine = t1_img.affine
         t1_affine_inv = np.linalg.inv(t1_affine)
 
-        for device_name in self.rosa_devices.keys():
+        if len(devices) == 0:
+            devices = self.rosa_devices.keys()
+        for device_name in devices:
         ## Rotate out of LAS (update rotation)
             rotation = np.eye(4)
             rotation[:3, :3] = scipy.spatial.transform.Rotation.from_euler('xyz', [0., 0., np.pi]).as_matrix() # matlab: rot2ras
@@ -568,7 +570,7 @@ class freeCoG:
             traj_to_mri = AffineTransform(traj_cmap.function_range, mri_cmap.function_range, aff)
             reg_traj = nipy.algorithms.resample.resample(traj_img, mri_cmap, traj_to_mri.inverse(), mri_img.shape)
             # Re-binarize data as we get these weird non-1 floats after resampling
-            arr = reg_traj.get_data()
+            arr = reg_traj.get_fdata()
             arr[arr > 0.5] = 1. # 0.5 is kind of arbitrary but whatever, it works
             arr[arr < 0.5] = 0.
             cmap = reg_traj.coordmap
@@ -585,7 +587,7 @@ class freeCoG:
             # Apply orientation to the image so that the order of the dimensions will be
             # sagittal, coronal, axial
             codes = nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(traj_img.affine))
-            img_data = nib.orientations.apply_orientation(traj_img.get_data(), codes)
+            img_data = nib.orientations.apply_orientation(traj_img.get_fdata(), codes)
             nx, ny, nz = np.array(img_data.shape, dtype='float')
             # Reshape image dimensions to imsz (if necessary)
             imsz = (256,256,256) # these are the image dimensions used in electrode_picker
@@ -754,10 +756,9 @@ class freeCoG:
         if not convert_all and device_name is None:
             raise ValueError("Must specify either convert_all=True or pass a device_name.")
         elif convert_all:
-            # Convert all elecs in TDT_elecs_all.mat
-            elecmat = self.elecs_dir + "/" + "TDT_elecs_all.mat"
+            elecmat = self.elecs_dir + "/" + "ROSA_elecs_all.mat" if rosa else self.elecs_dir + "/" + "TDT_elecs_all.mat"
             if not os.path.isfile(elecmat):
-                raise FileNotFoundError("TDT_elecs_all.mat has not been created yet.")
+                raise FileNotFoundError(f"{elecmat.split("/")[-1]} has not been created yet.")
         elif device_name is not None:
             elec_folder = os.path.join(self.elecs_dir, 'rosa') if rosa else os.path.join(self.elecs_dir,'individual_elecs')
             elecmat = elec_folder + '/' + device_name + '.mat'
@@ -773,10 +774,10 @@ class freeCoG:
         dat_file.append("info \n")
         dat_file.append(f"numpoints {len(elecmatrix)}\n")
         dat_file.append("useRealRAS 0") # we want TkRAS not scanner coordinates
-        fsdat_folder = self.elecs_dir + '/' + 'fsdat'
+        fsdat_folder = self.elecs_dir + '/' + 'fsdat' + '/' + 'rosa' if rosa else self.elecs_dir + '/' + 'fsdat'
         if not os.path.isdir(fsdat_folder):
             os.mkdir(fsdat_folder)
-        outfile = fsdat_folder + '/' + 'TDT_elecs_all.dat' if convert_all else fsdat_folder + '/' + device_name + '.dat'
+        outfile = fsdat_folder + '/' + elecmat.split("/")[-1].split(".mat")[0] + '.dat' if convert_all else fsdat_folder + '/' + device_name + '.dat'
         with open(outfile, 'w') as f:
             f.writelines(dat_file)
         # Open .dat in freeview if open_freeview
@@ -1240,7 +1241,7 @@ class freeCoG:
 
         newelecs = newelecs[newelecs != [0,0,0]]
         newelecmatrix = np.reshape(newelecs, (newelecs.shape[0]/3, 3))
-        neweleclabels = np.empty((newelecmatrix.shape[0], 3), dtype=np.object)
+        neweleclabels = np.empty((newelecmatrix.shape[0], 3), dtype=object)
         neweleclabels[:,0] = new_short_label
         neweleclabels[:,1] = new_long_label
         neweleclabels[:,2] = new_grid_depth
@@ -1336,29 +1337,29 @@ class freeCoG:
                         for item in subcort_vert]  # seperate strings
 
         # Convert into an array of floats
-        subcort_vert = np.array(np.vstack((subcort_vert)), dtype=np.float)
+        subcort_vert = np.array(np.vstack((subcort_vert)), dtype=float)
 
         # get rows for triangles only, strip 0 column, and split into seperate
         # strings
         subcort_tri = [item[:-2] for item in subcort_mat[subcort_inds[0] + 1:]]
         subcort_tri = [item.split(' ')
                        for item in subcort_tri]  # seperate strings
-        subcort_tri = np.array(np.vstack((subcort_tri)), dtype=np.int)
+        subcort_tri = np.array(np.vstack((subcort_tri)), dtype=int)
 
         outfile = '%s_subcort_trivert.mat' % (nuc)
         scipy.io.savemat(outfile, {'tri': subcort_tri, 'vert': subcort_vert})  # save tri/vert matrix
 
         # convert inds to scipy mat
-        subcort_inds = scipy.mat(subcort_inds)
+        # subcort_inds = scipy.mat(subcort_inds)
         scipy.io.savemat('%s_subcort_inds.mat' %
-                         (nuc), {'inds': subcort_inds})  # save inds
+                         (nuc), {'inds': np.array(subcort_inds)})  # save inds
         
         out_file_struct = '%s_subcort.mat' % (nuc)
         
         cortex = {'tri': subcort_tri+1, 'vert': subcort_vert}
         scipy.io.savemat(out_file_struct, {'cortex': cortex})
 
-    def make_elecs_all(self, input_list=None, outfile=None):
+    def make_elecs_all(self, input_list=None, outfile=None, rosa=False):
         '''Interactively creates a .mat file with the montage and coordinates of 
         all the elecs files in the /elecs_individual folder.
         
@@ -1373,6 +1374,9 @@ class freeCoG:
             you'd like to add. 
         outfile : str
             the name of the file you want to save to, specify this if not using the interactive version
+        rosa : bool
+            makes ROSA_elecs_all.mat from the elecfiles in /elecs/rosa folder
+        
 
         Usage
         -----
@@ -1381,6 +1385,11 @@ class freeCoG:
         
         '''
         short_names,long_names, elec_types, elecmatrix_all = [],[],[], []
+
+        if rosa:
+            # override passed input_list and outfile
+            outfile = 'ROSA_elecs_all'
+            input_list = [(s.split(".")[0], s.split(".")[0], 'depth', s) for s in os.listdir(os.path.join(self.elecs_dir, "rosa")) if '.mat' in s]
 
         #non-interactive version, with input_list and outfile specified
         if input_list != None:
@@ -1393,7 +1402,7 @@ class freeCoG:
                     long_names.extend([long_name_prefix for i in range(num_empty_rows)])
                     elec_types.extend([elec_type for i in range(num_empty_rows)])
                 else:
-                    indiv_file = os.path.join(self.elecs_dir,'individual_elecs', file_name)
+                    indiv_file = os.path.join(self.elecs_dir,'individual_elecs', file_name) if not rosa else os.path.join(self.elecs_dir, 'rosa', file_name)
                     elecmatrix = scipy.io.loadmat(indiv_file)['elecmatrix']
                     num_elecs = elecmatrix.shape[0]
                     elecmatrix_all.append(elecmatrix)
@@ -1436,7 +1445,7 @@ class freeCoG:
                     done = True 
             outfile = input('What filename would you like to save out to?\n')
         elecmatrix_all = np.vstack(elecmatrix_all)
-        eleclabels = np.ones(elecmatrix_all.shape,dtype=np.object)
+        eleclabels = np.ones(elecmatrix_all.shape,dtype=object)
         eleclabels[:,0] = short_names
         eleclabels[:,1] = long_names
         eleclabels[:,2] = elec_types
@@ -1583,11 +1592,11 @@ class freeCoG:
             indices_to_use = list(set(range(len(long_label))) - set(indices))
 
             # Initialize the cell array that we'll store electrode labels in later
-            elec_labels_orig = np.empty((len(long_label),4),dtype=np.object)
+            elec_labels_orig = np.empty((len(long_label),4),dtype=object)
             elec_labels_orig[:,0] = short_label
             elec_labels_orig[:,1] = long_label
             elec_labels_orig[:,2] = grid_or_depth 
-            elec_labels = np.empty((len(indices_to_use),4), dtype = np.object)
+            elec_labels = np.empty((len(indices_to_use),4), dtype = object)
             elecmatrix_orig = elecmatrix
             elecmatrix = elecmatrix[indices_to_use,:]
             
@@ -1613,7 +1622,7 @@ class freeCoG:
                               skip_header=2)
             vertnum, x, y, z, junk=d[~np.isnan(d)].reshape((-1,5)).T
             for v in vertnum:
-                vert_label[np.int(v)] = label_name.strip()
+                vert_label[int(v)] = label_name.strip()
             fid.close()
 
         trivert_file = os.path.join(self.mesh_dir, '%s_pial_trivert.mat'%(self.hem))
@@ -1640,7 +1649,7 @@ class freeCoG:
             elec_labels[isnotdepth,3] = elec_labels_notdepth
             elec_labels[np.invert(isnotdepth),3] = '' # Set these to an empty string instead of None type
         else:
-            elec_labels = np.array(elec_labels_notdepth, dtype = np.object)
+            elec_labels = np.array(elec_labels_notdepth, dtype = object)
         print('Saving electrode labels for surface electrodes to %s'%(elecfile_prefix))
         ## added by BKD so that elec_mat_grid='hd_grid' works. It does not contain elecmontage
         save_dict = {'elecmatrix': elecmatrix, 'anatomy': elec_labels}
@@ -1665,7 +1674,7 @@ class freeCoG:
 
             aseg_file = os.path.join(self.subj_dir, self.subj, 'mri', 'aparc%s+aseg.mgz'%(depth_atlas_nm))
             dat = nib.freesurfer.load(aseg_file)
-            aparc_dat = dat.get_data()
+            aparc_dat = dat.get_fdata()
              
             # Define the affine transform to go from surface coordinates to volume coordinates (as CRS, which is
             # the slice *number* as x,y,z in the 3D volume. That is, if there are 256 x 256 x 256 voxels, the
@@ -1698,11 +1707,11 @@ class freeCoG:
             for row in LUT:
                 if len(row)>1 and row[0][0] != '#' and row[0][0] != '\\': # Get rid of the comments
                     lname = row[1]
-                    lab[np.int(row[0])] = lname
+                    lab[int(row[0])] = lname
 
             # Label the electrodes according to the aseg volume
             nchans = VoxCRS.shape[0]
-            anatomy = np.empty((nchans,), dtype=np.object)
+            anatomy = np.empty((nchans,), dtype=object)
             print("Labeling electrodes...")
 
             for elec in np.arange(nchans):
@@ -2024,7 +2033,7 @@ class freeCoG:
             with open(trglabel, 'r') as fid2:
                 coord = fid2.readlines()[2].split()  # Get the third line
 
-            elecs_warped[c, :] = ([np.float(coord[1]), np.float(coord[2]), np.float(coord[3])])
+            elecs_warped[c, :] = ([float(coord[1]), float(coord[2]), float(coord[3])])
             # else:
             #     print("Channel %d is a depth electrode, not warping"%(chan))
             #     elecs_warped.append([np.nan, np.nan, np.nan])
@@ -2076,11 +2085,11 @@ class freeCoG:
 
         #template brain (cvs)
         cvs_img=nib.freesurfer.load(os.path.join(self.subj_dir, template, 'mri', 'aparc' + depth_atlas_nm + '+aseg.mgz'))
-        cvs_dat=cvs_img.get_data()
+        cvs_dat=cvs_img.get_fdata()
 
         #subj brain 
         subj_img=nib.freesurfer.load(os.path.join(self.mri_dir, 'aparc' + depth_atlas_nm + '+aseg.mgz'))
-        subj_dat=subj_img.get_data()
+        subj_dat=subj_img.get_fdata()
 
         pdf = PdfPages(os.path.join(self.elecs_dir, 'depthWarpsQC.pdf'))
         for i in range(len(subj_elecnums)): 
@@ -2904,7 +2913,7 @@ class freeCoG:
             all_lines_float = []
             for line in range(len(all_lines_str)):
                 all_lines_float.append([float(x) for x in all_lines_str[line]])
-            verts = np.array(all_lines_float, dtype=np.int)
+            verts = np.array(all_lines_float, dtype=int)
             vertnums.extend(verts[:,0].tolist())
         vertnums = sorted(vertnums)
         roi_mesh['vert'] = cortex['vert'][vertnums, :]
@@ -2990,9 +2999,9 @@ class freeCoG:
 
         facelines = list(filter(None, facelines))
 
-        vert = np.asarray(vertices, dtype=np.float)
-        face = np.asarray(facelines, dtype=np.int)
-        tri = np.zeros((face.shape[0], 3), dtype=np.int)
+        vert = np.asarray(vertices, dtype=float)
+        face = np.asarray(facelines, dtype=int)
+        tri = np.zeros((face.shape[0], 3), dtype=int)
 
         if face.shape[1] == 3:
             tri = face - 1

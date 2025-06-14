@@ -186,7 +186,7 @@ class electrode_picker:
         # Apply orientation to the MRI so that the order of the dimensions will be
         # sagittal, coronal, axial
         self.codes = nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(self.affine))
-        img_data = nib.orientations.apply_orientation(self.img.get_data(), self.codes)
+        img_data = nib.orientations.apply_orientation(self.img.get_fdata(), self.codes)
         self.voxel_sizes = nib.affines.voxel_sizes(self.affine)
         nx,ny,nz = np.array(img_data.shape, dtype='float')
 
@@ -195,13 +195,13 @@ class electrode_picker:
 
         # Apply orientation to pial surface fill
         self.pial_codes = nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(self.pial_img.affine))
-        pial_data = nib.orientations.apply_orientation(self.pial_img.get_data(), self.pial_codes)
+        pial_data = nib.orientations.apply_orientation(self.pial_img.get_fdata(), self.pial_codes)
         pial_data = scipy.ndimage.binary_closing(pial_data)
 
         # Apply orientation to the CT so that the order of the dimensions will be
         # sagittal, coronal, axial
         self.ct_codes =nib.orientations.axcodes2ornt(nib.orientations.aff2axcodes(self.ct.affine))
-        ct_data = nib.orientations.apply_orientation(self.ct.get_data(), self.ct_codes)
+        ct_data = nib.orientations.apply_orientation(self.ct.get_fdata(), self.ct_codes)
 
         cx,cy,cz=np.array(ct_data.shape, dtype='float')       
 
@@ -235,10 +235,10 @@ class electrode_picker:
         self.imsz = [256, 256, 256]
         self.ctsz = [256, 256, 256]
         
-        self.current_slice = np.array([self.imsz[0]/2, self.imsz[1]/2, self.imsz[2]/2], dtype=np.float)
+        self.current_slice = np.array([self.imsz[0]/2, self.imsz[1]/2, self.imsz[2]/2], dtype=float)
         
         self.fig=plt.figure(figsize=(12,10))
-        self.fig.canvas.set_window_title('Electrode Picker')
+        self.fig.canvas.setWindowTitle('Electrode Picker')
         thismanager = plt.get_current_fig_manager()
         thismanager.window.setWindowIcon(QtGui.QIcon((os.path.join('icons','leftbrain_blackbg.png'))))
         
@@ -263,7 +263,7 @@ class electrode_picker:
         self.T1_on = True # Whether T1 is visible or not
         
         # This is the current slice for indexing (as integers so python doesnt complain)
-        cs = np.round(self.current_slice).astype(np.int)
+        cs = np.round(self.current_slice).astype(int)
 
         # Plot sagittal, coronal, and axial views 
         for i in np.arange(3):
@@ -559,8 +559,8 @@ class electrode_picker:
         # Transform coordinates to figure coordinates
         fxy = self.fig.transFigure.inverted().transform((event.x, event.y))
         
-        # x = np.int(np.round(event.xdata.astype(np.float)))
-        # y = np.int(np.round(event.ydata.astype(np.float)))
+        # x = int(np.round(event.xdata.astype(float)))
+        # y = int(np.round(event.ydata.astype(float)))
 
         # If you clicked the first subplot
         if bb1.contains(fxy[0],fxy[1]):
@@ -608,7 +608,7 @@ class electrode_picker:
         followed by the maximum intensity projection of the CT scan (in the user
         specified view, which is sagittal by default)
         '''
-        cs = np.round(self.current_slice).astype(np.int) # Make integer for indexing the volume
+        cs = np.round(self.current_slice).astype(int) # Make integer for indexing the volume
 
         self.im[0].set_data(self.img_data[cs[0],:,:].T)
         self.im[1].set_data(self.img_data[:,cs[1],:].T)
@@ -723,13 +723,13 @@ class electrode_picker:
 
         # Make the current slice into an integer for indexing the volume
 
-        cs = np.round(self.current_slice).astype(np.int) 
+        cs = np.round(self.current_slice).astype(int) 
 
         # Create a sphere centered around the current point as a binary matrix
         radius = 2
         r2 = np.arange(-radius, radius+1)**2
         dist2 = r2[:,None,None]+r2[:,None]+r2
-        bin_mat = np.array(dist2<=radius**2, dtype=np.float)
+        bin_mat = np.array(dist2<=radius**2, dtype=float)
         bin_mat[bin_mat==0] = np.nan
         
         # The sphere part of the binary matrix will have a value that
