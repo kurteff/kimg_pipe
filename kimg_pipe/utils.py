@@ -17,7 +17,7 @@ import warnings
 from pyface.api import GUI
 import pylab as pl
 from kimg_pipe.SupplementalFiles import FS_colorLUT
-from kimg_pipe.img_pipe import remove_whitespace
+from kimg_pipe.kimg_pipe import remove_whitespace
 from matplotlib import pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import LinearSegmentedColormap

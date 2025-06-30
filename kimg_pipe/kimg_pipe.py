@@ -1558,180 +1558,221 @@ class freeCoG:
         gyri_labels_dir = os.path.join(self.subj_dir, self.subj, 'label', 'gyri')
         if not os.path.isdir(gyri_labels_dir):
             os.mkdir(gyri_labels_dir)
-         
-        # This version of mri_annotation2label uses the coarse labels from the Desikan-Killiany Atlas, unless
-        # atlas_surf is 'destrieux', in which case the more detailed labels are used
-        os.system('mri_annotation2label --subject %s --hemi %s --surface pial %s --outdir %s'%(self.subj, self.hem, surf_atlas_flag, gyri_labels_dir))
-        print('Loading electrode matrix')
-        elecfile = os.path.join(self.elecs_dir, elecfile_prefix+'.mat')
-        elecmatrix = scipy.io.loadmat(elecfile)['elecmatrix']
-        
-        # Initialize empty variable for indices of grid and strip electrodes
-        isnotdepth = []
-        
-        # Choose only the surface or grid electrodes (if not using hd_grid.mat)
-        if elecfile_prefix == 'TDT_elecs_all' or elecfile_prefix == 'clinical_elecs_all' or elecs_all:
-            elecmontage = scipy.io.loadmat(elecfile)['eleclabels']
-            # Make the cell array into something more usable by python
-            short_label = []
-            long_label = []
-            grid_or_depth = []
- 
-            for r in elecmontage:
-                short_label.append(r[0][0]) # This is the shortened electrode montage label
-                long_label.append(r[1][0]) # This is the long form electrode montage label
-                grid_or_depth.append(r[2][0]) # This is the label for grid, depth, or strip
+
+        # Need to run separately for lh and rh
+        hems = ['rh','lh'] if self.hem == 'stereo' else [self.hem]
+        all_labels = []
+        for h in hems:
+            # This version of mri_annotation2label uses the coarse labels from the Desikan-Killiany Atlas, unless
+            # atlas_surf is 'destrieux', in which case the more detailed labels are used
+            os.system('mri_annotation2label --subject %s --hemi %s --surface pial %s --outdir %s'%(self.subj, h, surf_atlas_flag, gyri_labels_dir))
+            print('Loading electrode matrix')
+            elecfile = os.path.join(self.elecs_dir, elecfile_prefix+'.mat')
+            elecmatrix = scipy.io.loadmat(elecfile)['elecmatrix']
             
-            # These are the indices that won't be used for labeling
-            #dont_label = ['EOG','ECG','ROC','LOC','EEG','EKG','NaN','EMG','scalpEEG']
-            indices = [i for i, x in enumerate(long_label) if ('EOG' in x or 'ECG' in x or 'ROC' in x or 'LOC' in x or 'EEG' in x or 'EKG' in x or 'NaN' in x or 'EMG' in x or x==np.nan or 'scalpEEG' in x)]
-            indices.extend([i for i, x in enumerate(short_label) if ('EOG' in x or 'ECG' in x or 'ROC' in x or 'LOC' in x or 'EEG' in x or 'EKG' in x or 'NaN' in x or 'EMG' in x or x==np.nan or 'scalpEEG' in x)])
-            indices.extend([i for i, x in enumerate(grid_or_depth) if ('EOG' in x or 'ECG' in x or 'ROC' in x or 'LOC' in x or 'EEG' in x or 'EKG' in x or 'NaN' in x or 'EMG' in x or x==np.nan or 'scalpEEG' in x)])
-            indices.extend(np.where(np.isnan(elecmatrix)==True)[0])
-            indices = list(set(indices))
-            indices_to_use = list(set(range(len(long_label))) - set(indices))
-
-            # Initialize the cell array that we'll store electrode labels in later
-            elec_labels_orig = np.empty((len(long_label),4),dtype=object)
-            elec_labels_orig[:,0] = short_label
-            elec_labels_orig[:,1] = long_label
-            elec_labels_orig[:,2] = grid_or_depth 
-            elec_labels = np.empty((len(indices_to_use),4), dtype = object)
-            elecmatrix_orig = elecmatrix
-            elecmatrix = elecmatrix[indices_to_use,:]
+            # Initialize empty variable for indices of grid and strip electrodes
+            isnotdepth = []
             
-            short_label_orig,long_label_orig,grid_or_depth_orig = short_label,long_label,grid_or_depth
-            short_label = [i for j, i in enumerate(short_label) if j not in indices]
-            long_label = [i for j, i in enumerate(long_label) if j not in indices]
-            grid_or_depth = [i for j, i in enumerate(grid_or_depth) if j not in indices]
-            elec_labels[:,0] = short_label
-            elec_labels[:,1] = long_label
-            elec_labels[:,2] = grid_or_depth
-            
-            # Find the non depth electrodes
-            isnotdepth = np.array([r!='depth' for r in grid_or_depth])
-            
-        # Use the surface label files to get which label goes with each surface vertex
-        label_files = glob.glob(os.path.join(gyri_labels_dir, '%s.*.label'%(self.hem)))
-        vert_label = {}
-        for label in label_files:
-            label_name = label.split('.')[1]
-            print('Loading label %s'%label_name)
-            fid = open(label,'r')
-            d = np.genfromtxt(fid, delimiter=' ', \
-                              skip_header=2)
-            vertnum, x, y, z, junk=d[~np.isnan(d)].reshape((-1,5)).T
-            for v in vertnum:
-                vert_label[int(v)] = label_name.strip()
-            fid.close()
+            # Choose only the surface or grid electrodes (if not using hd_grid.mat)
+            if elecfile_prefix == 'TDT_elecs_all' or elecfile_prefix == 'clinical_elecs_all' or elecs_all:
+                elecmontage = scipy.io.loadmat(elecfile)['eleclabels']
+                # Make the cell array into something more usable by python
+                short_label = []
+                long_label = []
+                grid_or_depth = []
+     
+                for r in elecmontage:
+                    short_label.append(r[0][0]) # This is the shortened electrode montage label
+                    long_label.append(r[1][0]) # This is the long form electrode montage label
+                    grid_or_depth.append(r[2][0]) # This is the label for grid, depth, or strip
+                
+                # These are the indices that won't be used for labeling
+                #dont_label = ['EOG','ECG','ROC','LOC','EEG','EKG','NaN','EMG','scalpEEG']
+                indices = [i for i, x in enumerate(long_label) if ('EOG' in x or 'ECG' in x or 'ROC' in x or 'LOC' in x or 'EEG' in x or 'EKG' in x or 'NaN' in x or 'EMG' in x or x==np.nan or 'scalpEEG' in x)]
+                indices.extend([i for i, x in enumerate(short_label) if ('EOG' in x or 'ECG' in x or 'ROC' in x or 'LOC' in x or 'EEG' in x or 'EKG' in x or 'NaN' in x or 'EMG' in x or x==np.nan or 'scalpEEG' in x)])
+                indices.extend([i for i, x in enumerate(grid_or_depth) if ('EOG' in x or 'ECG' in x or 'ROC' in x or 'LOC' in x or 'EEG' in x or 'EKG' in x or 'NaN' in x or 'EMG' in x or x==np.nan or 'scalpEEG' in x)])
+                indices.extend(np.where(np.isnan(elecmatrix)==True)[0])
+                indices = list(set(indices))
+                indices_to_use = list(set(range(len(long_label))) - set(indices))
 
-        trivert_file = os.path.join(self.mesh_dir, '%s_pial_trivert.mat'%(self.hem))
-        cortex_verts = scipy.io.loadmat(trivert_file)['vert']
+                # Initialize the cell array that we'll store electrode labels in later
+                elec_labels_orig = np.empty((len(long_label),4),dtype=object)
+                elec_labels_orig[:,0] = short_label
+                elec_labels_orig[:,1] = long_label
+                elec_labels_orig[:,2] = grid_or_depth 
+                elec_labels = np.empty((len(indices_to_use),4), dtype = object)
+                elecmatrix_orig = elecmatrix
+                elecmatrix = elecmatrix[indices_to_use,:]
+                
+                short_label_orig,long_label_orig,grid_or_depth_orig = short_label,long_label,grid_or_depth
+                short_label = [i for j, i in enumerate(short_label) if j not in indices]
+                long_label = [i for j, i in enumerate(long_label) if j not in indices]
+                grid_or_depth = [i for j, i in enumerate(grid_or_depth) if j not in indices]
+                elec_labels[:,0] = short_label
+                elec_labels[:,1] = long_label
+                elec_labels[:,2] = grid_or_depth
+                
+                # Find the non depth electrodes
+                isnotdepth = np.array([r!='depth' for r in grid_or_depth])
+                
+            # Use the surface label files to get which label goes with each surface vertex
+            label_files = glob.glob(os.path.join(gyri_labels_dir, '%s.*.label'%(h)))
+            vert_label = {}
+            for label in label_files:
+                label_name = label.split('.')[1]
+                print('Loading label %s'%label_name)
+                fid = open(label,'r')
+                d = np.genfromtxt(fid, delimiter=' ', \
+                                  skip_header=2)
+                vertnum, x, y, z, junk=d[~np.isnan(d)].reshape((-1,5)).T
+                for v in vertnum:
+                    vert_label[int(v)] = label_name.strip()
+                fid.close()
 
-        # Only use electrodes that are grid or strips
-        if len(isnotdepth)>0:
-            elecmatrix_new = elecmatrix[isnotdepth,:]
-        else:
-            elecmatrix_new = elecmatrix
+            trivert_file = os.path.join(self.mesh_dir, '%s_pial_trivert.mat'%(h))
+            cortex_verts = scipy.io.loadmat(trivert_file)['vert']
 
-        print('Finding nearest mesh vertex for each electrode')
-        vert_inds, nearest_verts = self.nearest_electrode_vert(cortex_verts, elecmatrix_new)
-
-        ## Now make a dictionary of the label for each electrode
-        elec_labels_notdepth=[]
-        for v in range(len(vert_inds)):
-            if vert_inds[v] in vert_label:
-                elec_labels_notdepth.append(vert_label[vert_inds[v]].strip())
+            # Only use electrodes that are grid or strips
+            if len(isnotdepth)>0:
+                elecmatrix_new = elecmatrix[isnotdepth,:]
             else:
-                elec_labels_notdepth.append('Unknown')
+                elecmatrix_new = elecmatrix
 
-        if elecfile_prefix == 'TDT_elecs_all' or elecfile_prefix == 'clinical_elecs_all' or elecs_all:
-            elec_labels[isnotdepth,3] = elec_labels_notdepth
-            elec_labels[np.invert(isnotdepth),3] = '' # Set these to an empty string instead of None type
-        else:
-            elec_labels = np.array(elec_labels_notdepth, dtype = object)
-        print('Saving electrode labels for surface electrodes to %s'%(elecfile_prefix))
-        ## added by BKD so that elec_mat_grid='hd_grid' works. It does not contain elecmontage
-        save_dict = {'elecmatrix': elecmatrix, 'anatomy': elec_labels}
-        if 'elecmontage' in locals():
-            save_dict['eleclabels'] = elecmontage
-        else:
-            print('electmontage does not exist')
-        #scipy.io.savemat('%s/%s/elecs/%s'%(self.subj_dir, self.subj, elecfile_prefix), save_dict)
+            print('Finding nearest mesh vertex for each electrode')
+            vert_inds, nearest_verts = self.nearest_electrode_vert(cortex_verts, elecmatrix_new)
 
-        if np.any(np.invert(isnotdepth)): # If there are depth electrodes, run this part
-            print('*************************************************')
-            print('Now doing the depth electrodes')
+            ## Now make a dictionary of the label for each electrode
+            elec_labels_notdepth=[]
+            for v in range(len(vert_inds)):
+                if vert_inds[v] in vert_label:
+                    elec_labels_notdepth.append(vert_label[vert_inds[v]].strip())
+                else:
+                    elec_labels_notdepth.append('Unknown')
 
-            # Get the volume corresponding to the labels from the Destrieux atlas, which is more 
-            # detailed than Desikan-Killiany (https://surfer.nmr.mgh.harvard.edu/fswiki/CorticalParcellation)
-            if atlas_depth == 'desikan-killiany':
-                depth_atlas_nm = ''
-            elif atlas_depth == 'destrieux':
-                depth_atlas_nm = '.a2009s'
+            if elecfile_prefix == 'TDT_elecs_all' or elecfile_prefix == 'clinical_elecs_all' or elecs_all:
+                elec_labels[isnotdepth,3] = elec_labels_notdepth
+                elec_labels[np.invert(isnotdepth),3] = '' # Set these to an empty string instead of None type
             else:
-                depth_atlas_nm = '.a2009s'
+                elec_labels = np.array(elec_labels_notdepth, dtype = object)
+            print('Saving electrode labels for surface electrodes to %s'%(elecfile_prefix))
+            ## added by BKD so that elec_mat_grid='hd_grid' works. It does not contain elecmontage
+            save_dict = {'elecmatrix': elecmatrix, 'anatomy': elec_labels}
+            if 'elecmontage' in locals():
+                save_dict['eleclabels'] = elecmontage
+            else:
+                print('electmontage does not exist')
+            #scipy.io.savemat('%s/%s/elecs/%s'%(self.subj_dir, self.subj, elecfile_prefix), save_dict)
 
-            aseg_file = os.path.join(self.subj_dir, self.subj, 'mri', 'aparc%s+aseg.mgz'%(depth_atlas_nm))
-            dat = nib.freesurfer.load(aseg_file)
-            aparc_dat = dat.get_fdata()
-             
-            # Define the affine transform to go from surface coordinates to volume coordinates (as CRS, which is
-            # the slice *number* as x,y,z in the 3D volume. That is, if there are 256 x 256 x 256 voxels, the
-            # CRS coordinate will go from 0 to 255.)
-            affine = np.array([[  -1.,    0.,    0.,  128.],
-                               [   0.,    0.,    1., -128.],
-                               [   0.,   -1.,    0.,  128.],
-                               [   0.,    0.,    0.,    1.]])
+            if np.any(np.invert(isnotdepth)): # If there are depth electrodes, run this part
+                print('*************************************************')
+                print('Now doing the depth electrodes')
 
-            elecs_depths = elecmatrix[np.invert(isnotdepth),:]
-            intercept = np.ones(len(elecs_depths))
-            elecs_ones = np.column_stack((elecs_depths,intercept))
+                # Get the volume corresponding to the labels from the Destrieux atlas, which is more 
+                # detailed than Desikan-Killiany (https://surfer.nmr.mgh.harvard.edu/fswiki/CorticalParcellation)
+                if atlas_depth == 'desikan-killiany':
+                    depth_atlas_nm = ''
+                elif atlas_depth == 'destrieux':
+                    depth_atlas_nm = '.a2009s'
+                else:
+                    depth_atlas_nm = '.a2009s'
 
-            # Find voxel CRS
-            VoxCRS = np.dot(np.linalg.inv(affine), elecs_ones.transpose()).transpose().astype(int)
-            # Make meshgrid the same size as aparc_dat (only for gaussian blob version), ignore
-            #xx, yy, zz = np.mgrid[0:aparc_dat.shape[0], 0:aparc_dat.shape[1], 0:aparc_dat.shape[2]]
-            #unique_labels = np.unique(aparc_dat)
-            #unique_labels = unique_labels[unique_labels>0]
+                aseg_file = os.path.join(self.subj_dir, self.subj, 'mri', 'aparc%s+aseg.mgz'%(depth_atlas_nm))
+                dat = nib.freesurfer.load(aseg_file)
+                aparc_dat = dat.get_fdata()
+                 
+                # Define the affine transform to go from surface coordinates to volume coordinates (as CRS, which is
+                # the slice *number* as x,y,z in the 3D volume. That is, if there are 256 x 256 x 256 voxels, the
+                # CRS coordinate will go from 0 to 255.)
+                affine = np.array([[  -1.,    0.,    0.,  128.],
+                                   [   0.,    0.,    1., -128.],
+                                   [   0.,   -1.,    0.,  128.],
+                                   [   0.,    0.,    0.,    1.]])
 
-            # Get the names of these labels using Freesurfer's lookup table (LUT)
-            print("Loading lookup table for freesurfer labels")
-            fid = open(os.path.join(self.fs_dir,'FreeSurferColorLUT.txt'))
-            LUT = fid.readlines()
-            fid.close()
+                elecs_depths = elecmatrix[np.invert(isnotdepth),:]
+                intercept = np.ones(len(elecs_depths))
+                elecs_ones = np.column_stack((elecs_depths,intercept))
 
-            # Make dictionary of labels
-            LUT = [row.split() for row in LUT]
-            lab = {}
-            for row in LUT:
-                if len(row)>1 and row[0][0] != '#' and row[0][0] != '\\': # Get rid of the comments
-                    lname = row[1]
-                    lab[int(row[0])] = lname
+                # Find voxel CRS
+                VoxCRS = np.dot(np.linalg.inv(affine), elecs_ones.transpose()).transpose().astype(int)
+                # Make meshgrid the same size as aparc_dat (only for gaussian blob version), ignore
+                #xx, yy, zz = np.mgrid[0:aparc_dat.shape[0], 0:aparc_dat.shape[1], 0:aparc_dat.shape[2]]
+                #unique_labels = np.unique(aparc_dat)
+                #unique_labels = unique_labels[unique_labels>0]
 
-            # Label the electrodes according to the aseg volume
-            nchans = VoxCRS.shape[0]
-            anatomy = np.empty((nchans,), dtype=object)
-            print("Labeling electrodes...")
+                # Get the names of these labels using Freesurfer's lookup table (LUT)
+                print("Loading lookup table for freesurfer labels")
+                fid = open(os.path.join(self.fs_dir,'FreeSurferColorLUT.txt'))
+                LUT = fid.readlines()
+                fid.close()
 
-            for elec in np.arange(nchans):
-                anatomy[elec] = lab[aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]]]
-                print("E%d, Vox CRS: [%d, %d, %d], Label #%d = %s"%(elec, VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2], 
-                                                                    aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]], 
-                                                                    anatomy[elec]))
+                # Make dictionary of labels
+                LUT = [row.split() for row in LUT]
+                lab = {}
+                for row in LUT:
+                    if len(row)>1 and row[0][0] != '#' and row[0][0] != '\\': # Get rid of the comments
+                        lname = row[1]
+                        lab[int(row[0])] = lname
 
-            elec_labels[np.invert(isnotdepth),3] = anatomy
+                # Label the electrodes according to the aseg volume
+                nchans = VoxCRS.shape[0]
+                anatomy = np.empty((nchans,), dtype=object)
+                print("Labeling electrodes...")
+
+                for elec in np.arange(nchans):
+                    anatomy[elec] = lab[aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]]]
+                    print("E%d, Vox CRS: [%d, %d, %d], Label #%d = %s"%(elec, VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2], 
+                                                                        aparc_dat[VoxCRS[elec,0], VoxCRS[elec,1], VoxCRS[elec,2]], 
+                                                                        anatomy[elec]))
+
+                elec_labels[np.invert(isnotdepth),3] = anatomy
+                
+                #make some corrections b/c of NaNs in elecmatrix
+            elec_labels_orig[:,3] = ''
+            elec_labels_orig[indices_to_use,3] = elec_labels[:,3] 
             
-            #make some corrections b/c of NaNs in elecmatrix
-        elec_labels_orig[:,3] = ''
-        elec_labels_orig[indices_to_use,3] = elec_labels[:,3] 
-        
-        print('Saving electrode labels to %s'%(elecfile_prefix))
-        scipy.io.savemat(os.path.join(self.elecs_dir, elecfile_prefix+'.mat'), {'elecmatrix': elecmatrix_orig, 
-                                                                                'anatomy': elec_labels_orig, 
-                                                                                'eleclabels': elecmontage})
+            print('Saving electrode labels to %s'%(elecfile_prefix))
+            scipy.io.savemat(os.path.join(self.elecs_dir, elecfile_prefix+'.mat'), {'elecmatrix': elecmatrix_orig, 
+                                                                                    'anatomy': elec_labels_orig, 
+                                                                                    'eleclabels': elecmontage})
+            all_labels.append(elec_labels) 
+        return np.vstack((all_labels))
 
-        return elec_labels
+    def rm_warp(self, elecfile_prefix='TDT_elecs_all'):
+        '''
+        Simple wrapper function that deletes all files generated by self.warp_all(),
+        so you can start over with a clean slate :)
+        '''
+        n_removed = 0
+        # Delete the entire cvs folder
+        cvs_dir = os.path.join(self.subj_dir, self.subj, 'cvs')
+        if os.path.isdir(cvs_dir):
+            print(f"Deleting {cvs_dir}...")
+            n_removed += len(os.listdir(cvs_dir))
+            shutil.rmtree(cvs_dir)
+        # Delete entire warps_preproc folder
+        warp_pp_dir = os.path.join(self.elecs_dir, 'warps_preproc')
+        if os.path.isdir(warp_pp_dir):
+            print(f"Deleting {warp_pp_dir}...")
+            n_removed += len(os.listdir(warp_pp_dir))
+            shutil.rmtree(warp_pp_dir); n_removed += 1
+        # Individual files in elecs_dir
+        to_rm = [
+            os.path.join(self.elecs_dir, '%s_warped.mat'%(elecfile_prefix)),
+            os.path.join(self.elecs_dir, '%s_nearest_warped.mat'%(elecfile_prefix)),
+            os.path.join(self.elecs_dir, elecfile_prefix+'_nearest_warped.txt'),
+            os.path.join(self.elecs_dir, elecfile_prefix+'_RAS.txt'),
+            os.path.join(self.elecs_dir,'depthWarpsQC.pdf'),
+            os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')
+        ]
+        for f in to_rm:
+            if os.path.isfile(f):
+                print(f"Deleting {f}...")
+                n_removed += 1
+                os.remove(f)
+        if n_removed > 0:
+            print(f"{n_removed} warp files removed. To use warped elecs please re-run patient.warp_all().")
+        else:
+            print("No warp files found (nothing deleted). If this is not the expected result, please double-check your elecfile_prefix and subj_dir.")
 
     def warp_all(self, elecfile_prefix='TDT_elecs_all', warp_depths=True, warp_surface=True, template='cvs_avg35_inMNI152'):
         ''' Warps surface and depth electrodes and runs quality checking functions for them. 
@@ -1752,6 +1793,9 @@ class freeCoG:
         -------
         Creates the file depthWarpsQC.pdf in patient.elecs_dir, which can be used for depth warping
         quality checking. 
+
+        NOTE: the way this function is currently written is incompatible with Freesurfer versions 8.x.x.
+              I'll eventually rewrite it to be compatible with newer versions...
         '''
 
         print("Using %s as the template for warps"%(template))
@@ -1771,10 +1815,12 @@ class freeCoG:
         if 'depth' in orig_elecs['anatomy'][:,2] and warp_depths:
             #if mri_cvs_register already run, don't run again
             if not os.path.isfile(os.path.join(self.subj_dir, self.subj, 'cvs', 'combined_to'+template+'_elreg_afteraseg-norm.tm3d')):
+                print("Running patient.get_cvsWarp()...")
                 self.get_cvsWarp(template)
             else:
                 print('%s registration file already created, proceeding to apply the depth warp'%(os.path.join(self.subj_dir, self.subj, 'cvs', 'combined_to'+template+'_elreg_afteraseg-norm.tm3d')))
             if not os.path.isfile(elecfile_nearest_warped):
+                print("Running patient.apply_cvsWarp()...")
                 self.apply_cvsWarp(elecfile_prefix,template)
             else:
                 print("Depth warping has already been applied to the depth electrodes of %s and are in %s"\
@@ -1785,11 +1831,13 @@ class freeCoG:
             if depth_warps['elecmatrix'].size > 0:
                 orig_elecs['elecmatrix'][depth_indices] = depth_warps['elecmatrix']
             if not os.path.isfile(os.path.join(self.elecs_dir,'depthWarpsQC.pdf')):
+                print("Running patient.check_depth_warps()...")
                 self.check_depth_warps(elecfile_prefix,template)
         
         if warp_surface:
             #if surface warp already run, don't run again
             if not os.path.isfile(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')):
+                print("Running patient.get_surface_warp()...")
                 self.get_surface_warp(elecfile_prefix,template)
             else:
                 print('Found %s, not running surface warp again'%(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')))
@@ -1803,6 +1851,7 @@ class freeCoG:
         if warp_depths and warp_surface:
             scipy.io.savemat(elecfile_warped,{'elecmatrix':orig_elecs['elecmatrix'],'anatomy':orig_elecs['anatomy']})
             
+            print("Plotting recon anatomy...")
             self.plot_recon_anatomy_compare_warped(elecfile_prefix=elecfile_prefix)
 
             if not os.path.isdir(os.path.join(self.elecs_dir, 'warps_preproc')):
@@ -1832,7 +1881,6 @@ class freeCoG:
         Returns
         -------
         None.
-
         '''
 
         # run cvs register
@@ -1856,6 +1904,9 @@ class freeCoG:
         -------
         elecmatrix : array-like
             [nchans x 3] electrode matrix after nonlinear warping
+
+        NOTE: the way this function is currently written is incompatible with Freesurfer versions 8.x.x.
+          I'll eventually rewrite it to be compatible with newer versions...
         '''
 
         elecmatrix = np.empty((0, 4), int)
@@ -1949,7 +2000,7 @@ class freeCoG:
             anatomy = scipy.io.loadmat(os.path.join(self.elecs_dir, basename + '.mat'))['anatomy']
             labelpath = os.path.join(self.subj_dir, self.subj, 'label')
             elecs_warped = self.compute_surface_warp(elecmatrix, anatomy, labelpath, basename, template)
-
+            print("Surface elecs:", elecs_warped.shape)
             scipy.io.savemat(elecfile, {'elecmatrix': np.array(elecs_warped), 'anatomy': anatomy})
 
             print("Surface warp for %s complete. Warped coordinates in %s" % (self.subj, elecfile))
@@ -2004,47 +2055,53 @@ class freeCoG:
             surface_indices = range(len(elecmatrix))
 
         print("Finding nearest surface vertex for each electrode")
-        vert_inds, nearest_verts = self.nearest_electrode_vert(cortex_src['vert'], elecmatrix[surface_indices, :])
-        elecmatrix = nearest_verts
+        hems = ['rh','lh'] if self.hem == 'stereo' else self.hem
+        all_warped = []
+        for h in hems:
+            vert = cortex_src[h]['vert'] if self.hem == 'stereo' else cortex_src['vert']
+            vert_inds, nearest_verts = self.nearest_electrode_vert(vert, elecmatrix[surface_indices, :])
+            elecmatrix = nearest_verts
 
-        print('Warping each electrode separately:')
-        elecs_warped = np.nan * np.ones((len(surface_indices), 3))
+            print(f'Warping each electrode separately ({h}):')
+            elecs_warped = np.nan * np.ones((len(surface_indices), 3))
 
-        for c in np.arange(len(surface_indices)):
-            chan = surface_indices[c]
-            # Open label file for writing
-            labelname_nopath = '%s.%s.chan%03d.label' % (self.hem, basename, chan)
-            labelname = os.path.join(labels_to_warp_path, labelname_nopath)
+            for c in np.arange(len(surface_indices)):
+                chan = surface_indices[c]
+                # Open label file for writing
+                labelname_nopath = '%s.%s.chan%03d.label' % (h, basename, chan)
+                labelname = os.path.join(labels_to_warp_path, labelname_nopath)
 
-            with open(labelname, 'w') as fid:
-                fid.write('%s\n' % (labelname))
-                # Print header of label file
-                fid.write('#!ascii label  , from subject %s vox2ras=TkReg\n1\n' % (self.subj))
-                fid.write('%i %.9f %.9f %.9f 0.0000000' % (vert_inds[chan], elecmatrix[chan, 0],
-                                                           elecmatrix[chan, 1], elecmatrix[chan, 2]))
+                with open(labelname, 'w') as fid:
+                    fid.write('%s\n' % (labelname))
+                    # Print header of label file
+                    fid.write('#!ascii label  , from subject %s vox2ras=TkReg\n1\n' % (self.subj))
+                    fid.write('%i %.9f %.9f %.9f 0.0000000' % (vert_inds[chan], elecmatrix[chan, 0],
+                                                               elecmatrix[chan, 1], elecmatrix[chan, 2]))
 
-            print("Warping ch %d" % (chan))
-            trglabel = os.path.join(warped_labels_dir, '%s.to.%s.%s' % (self.subj, template, labelname_nopath))
-            os.system('mri_label2label --srclabel ' + labelname + ' --srcsubject ' + self.subj + \
-                      ' --trgsubject ' + template + ' --trglabel ' + trglabel + ' --regmethod surface --hemi ' + self.hem + \
-                      ' --trgsurf pial --paint 6 pial --sd ' + self.subj_dir)
+                print("Warping ch %d" % (chan))
+                trglabel = os.path.join(warped_labels_dir, '%s.to.%s.%s' % (self.subj, template, labelname_nopath))
+                os.system('mri_label2label --srclabel ' + labelname + ' --srcsubject ' + self.subj + \
+                          ' --trgsubject ' + template + ' --trglabel ' + trglabel + ' --regmethod surface --hemi ' + h + \
+                          ' --trgsurf pial --paint 6 pial --sd ' + self.subj_dir)
 
-            # Get the electrode coordinate from the label file
-            with open(trglabel, 'r') as fid2:
-                coord = fid2.readlines()[2].split()  # Get the third line
+                # Get the electrode coordinate from the label file
+                with open(trglabel, 'r') as fid2:
+                    coord = fid2.readlines()[2].split()  # Get the third line
 
-            elecs_warped[c, :] = ([float(coord[1]), float(coord[2]), float(coord[3])])
-            # else:
-            #     print("Channel %d is a depth electrode, not warping"%(chan))
-            #     elecs_warped.append([np.nan, np.nan, np.nan])
+                elecs_warped[c, :] = ([float(coord[1]), float(coord[2]), float(coord[3])])
+                # else:
+                #     print("Channel %d is a depth electrode, not warping"%(chan))
+                #     elecs_warped.append([np.nan, np.nan, np.nan])
 
-            # intersect, t, u, v, xcoor = TriangleRayIntersection(elec, [1000, 0, 0], vert1,vert2,vert3, fullReturn=True)
+                # intersect, t, u, v, xcoor = TriangleRayIntersection(elec, [1000, 0, 0], vert1,vert2,vert3, fullReturn=True)
 
-        if labelpath == 'tmp/':
-            shutil.rmtree(labels_to_warp_path)
-            shutil.rmtree(warped_labels_dir)
+            if labelpath == 'tmp/':
+                shutil.rmtree(labels_to_warp_path)
+                shutil.rmtree(warped_labels_dir)
 
-        return elecs_warped
+            all_warped.append(elecs_warped)
+
+        return np.vstack((all_warped))
 
 
     def check_depth_warps(self, elecfile_prefix='TDT_elecs_all',template='cvs_avg35_inMNI152',atlas_depth='destrieux'):
@@ -2198,10 +2255,11 @@ class freeCoG:
         '''
 
         fs_lut = os.path.join(self.kimg_pipe_dir, 'SupplementalFiles', 'FreeSurferLUTRGBValues.npy')
-        cmap = matplotlib.colors.ListedColormap(np.load(fs_lut)[:cvs_dat.max()+1,:])
+        cmap = matplotlib.colors.ListedColormap(np.load(fs_lut)[:cvs_dat.max().astype(int)+1,:])
 
         lookupTable = os.path.join(self.kimg_pipe_dir, 'SupplementalFiles', 'FreeSurferLookupTable')
-        lookup_dict = pickle.load(open(lookupTable,'r'))
+        with open(lookupTable, 'rb') as f:
+            lookup_dict = pickle.load(f)
         fig = plt.figure(figsize=((30,17)))
         nonzero_indices = np.where(cvs_dat>0)
         offset = 35 #this is how much you want to trim the mri by, there is a lot of empty space
@@ -2211,19 +2269,19 @@ class freeCoG:
 
         plt.subplot(2,3,1)
         plt.imshow(cvs_dat[cvs_vox_CRS[0],:,:], cmap=cmap)
-        plt.plot(cvs_vox_CRS[2],cvs_vox_CRS[1],'r*',markersize=14,color='#FFFFFF')
+        plt.plot(cvs_vox_CRS[2],cvs_vox_CRS[1],'*',markersize=14,color='#FFFFFF', mec='r', mew=2)
         plt.axis('tight'); ax = plt.gca(); ax.set_axis_off()
 
         plt.subplot(2,3,2)
         plt.imshow(cvs_dat[:,cvs_vox_CRS[1],:].T, cmap=cmap)
-        plt.plot(cvs_vox_CRS[0],cvs_vox_CRS[2],'r*',markersize=14,color='#FFFFFF')
+        plt.plot(cvs_vox_CRS[0],cvs_vox_CRS[2],'*',markersize=14,color='#FFFFFF', mec='r', mew=2)
         plt.axis('tight'); ax = plt.gca(); ax.set_axis_off()
         #t=plt.text(10,25,lookup_dict[cvs_dat[cvs_vox_CRS[0],cvs_vox_CRS[1],cvs_vox_CRS[2]]],color='white',size=25)
         plt.title('CVS brain ' + lookup_dict[cvs_dat[cvs_vox_CRS[0],cvs_vox_CRS[1],cvs_vox_CRS[2]]],size=20)
 
         plt.subplot(2,3,3)
         plt.imshow(cvs_dat[:,:,cvs_vox_CRS[2]].T, cmap=cmap)   
-        plt.plot(cvs_vox_CRS[0],cvs_vox_CRS[1],'r*',markersize=14,color='#FFFFFF')
+        plt.plot(cvs_vox_CRS[0],cvs_vox_CRS[1],'*',markersize=14,color='#FFFFFF', mec='r', mew=2)
         plt.axis('tight'); ax = plt.gca(); ax.set_axis_off()
 
         subj_dat = subj_dat[offset:-offset,offset:-offset,offset:-offset]
@@ -2231,19 +2289,19 @@ class freeCoG:
 
         ax1=plt.subplot(2,3,4).axes
         plt.imshow(subj_dat[subj_vox_CRS[0],:,:], cmap=cmap)
-        plt.plot(subj_vox_CRS[2],subj_vox_CRS[1],'r*',markersize=14,color='#FFFFFF')
+        plt.plot(subj_vox_CRS[2],subj_vox_CRS[1],'*',markersize=14,color='#FFFFFF', mec='r', mew=2)
         plt.axis('tight'); ax = plt.gca(); ax.set_axis_off()
 
         ax2=plt.subplot(2,3,5).axes
         plt.imshow(subj_dat[:,subj_vox_CRS[1],:].T, cmap=cmap)
-        plt.plot(subj_vox_CRS[0],subj_vox_CRS[2],'r*',markersize=14,color='#FFFFFF')
+        plt.plot(subj_vox_CRS[0],subj_vox_CRS[2],'*',markersize=14,color='#FFFFFF', mec='r', mew=2)
         plt.axis('tight'); ax = plt.gca(); ax.set_axis_off()
         #t=plt.text(10,25,lookup_dict[subj_dat[subj_vox_CRS[0],subj_vox_CRS[1],subj_vox_CRS[2]]],color='white',size=25)
         plt.title(self.subj + ' ' +lookup_dict[subj_dat[subj_vox_CRS[0],subj_vox_CRS[1],subj_vox_CRS[2]]],size=20)
 
         ax3=plt.subplot(2,3,6).axes
         plt.imshow(subj_dat[:,:,subj_vox_CRS[2]].T, cmap=cmap)   
-        plt.plot(subj_vox_CRS[0],subj_vox_CRS[1],'r*',markersize=14,color='#FFFFFF')
+        plt.plot(subj_vox_CRS[0],subj_vox_CRS[1],'*',markersize=14,color='#FFFFFF', mec='r', mew=2)
         plt.axis('tight'); ax = plt.gca(); ax.set_axis_off()
 
         if cvs_dat[cvs_vox_CRS[0],cvs_vox_CRS[1],cvs_vox_CRS[2]] != subj_dat[subj_vox_CRS[0],subj_vox_CRS[1],subj_vox_CRS[2]]:
@@ -2438,7 +2496,7 @@ class freeCoG:
         rois : list of roi objects 
             (create an roi object like so:
             hipp_roi = patient.roi(name='lHipp', color=(0.5,0.1,0.8), opacity=1.0, 
-	                           representation='surface', gaussian=True)). 
+                               representation='surface', gaussian=True)). 
             See get_rois() method for available ROI names.
         elecs : array-like
             [nchans x 3] electrode coordinate matrix
@@ -2795,18 +2853,28 @@ class freeCoG:
         subj_e = self.get_elecs(elecfile_prefix=elecfile_prefix)
         template_e = self.get_elecs(elecfile_prefix=elecfile_prefix+'_warped')
         
-        subj_brain_width = np.abs(np.max(subj_brain['vert'][:,1])-np.min(subj_brain['vert'][:,1]))
-        template_brain_width = np.abs(np.max(template_brain['vert'][:,1])-np.min(template_brain['vert'][:,1]))
+        hems = ['rh', 'lh'] if self.hem == 'stereo' else [self.hem]
+        for h in hems:
+            subj_tri = subj_brain[h]['tri'] if self.hem == 'stereo' else subj_brain['tri']
+            subj_vert = subj_brain[h]['vert'] if self.hem == 'stereo' else subj_brain['vert']
+            subj_brain_width = np.abs(np.max(subj_vert[:,1])-np.min(subj_vert[:,1]))
+            
+            template_tri = template_brain[h]['tri'] if self.hem == 'stereo' else template_brain['tri']
+            template_vert = template_brain[h]['vert'] if self.hem == 'stereo' else template_brain['vert']
+            template_brain_width = np.abs(np.max(template_vert[:,1])-np.min(template_vert[:,1]))
         
-        subj_e['elecmatrix'][:,1] = subj_e['elecmatrix'][:,1]-((subj_brain_width+template_brain_width)/4)
-        template_e['elecmatrix'][:,1] = template_e['elecmatrix'][:,1]+((subj_brain_width+template_brain_width)/4)
+            subj_e['elecmatrix'][:,1] = subj_e['elecmatrix'][:,1]-((subj_brain_width+template_brain_width)/4)
+            template_e['elecmatrix'][:,1] = template_e['elecmatrix'][:,1]+((subj_brain_width+template_brain_width)/4)
 
-        subj_brain['vert'][:,1] = subj_brain['vert'][:,1]-((subj_brain_width+template_brain_width)/4)
-        template_brain['vert'][:,1] = template_brain['vert'][:,1]+((subj_brain_width+template_brain_width)/4)
+            subj_vert[:,1] = subj_vert[:,1]-((subj_brain_width+template_brain_width)/4)
+            template_vert[:,1] = template_vert[:,1]+((subj_brain_width+template_brain_width)/4)
         
-        # Plot the pial surface
-        subj_mesh, mlab = ctmr_brain_plot.ctmr_gauss_plot(subj_brain['tri'], subj_brain['vert'], color=(0.8, 0.8, 0.8))
-        template_mesh, mlab = ctmr_brain_plot.ctmr_gauss_plot(template_brain['tri'], template_brain['vert'], color=(0.8, 0.8, 0.8),new_fig=False)
+            # Plot the pial surface
+            if h == hems[0]:
+                subj_mesh, mlab = ctmr_brain_plot.ctmr_gauss_plot(subj_tri, subj_vert, color=(0.8, 0.8, 0.8))
+            else:
+                subj_mesh, mlab = ctmr_brain_plot.ctmr_gauss_plot(subj_tri, subj_vert, color=(0.8, 0.8, 0.8), new_fig=False)
+            template_mesh, mlab = ctmr_brain_plot.ctmr_gauss_plot(template_tri, template_vert, color=(0.8, 0.8, 0.8), new_fig=False)
 
         # Import freesurfer color lookup table as a dictionary
         cmap = FS_colorLUT.get_lut()
@@ -2844,6 +2912,8 @@ class freeCoG:
             azimuth = 180
         elif self.hem == 'rh':
             azimuth = 0
+        else:
+            azimuth = 180
         mlab.view(azimuth, elevation=90)
 
         #adjust transparency of brain mesh
@@ -3031,18 +3101,18 @@ class freeCoG:
          pial.cortex is used by default. It contains both hemispheres'''
 
         #         Header format
-        # [000-011]	char headerType[12]; // should be DFS_BE v2.0\0 on big-endian machines, DFS_LEv1.0\0 on little-endian
-        # [012-015] int32 hdrsize;			// Size of complete header (i.e., offset of first data element)
-        # [016-010] int32 mdoffset;			// Start of metadata.
-        # [020-023] int32 pdoffset;			// Start of patient data header.
-        # [024-027] int32 nTriangles;		// Number of triangles
-        # [028-031] int32 nVertices;		// Number of vertices
-        # [032-035] int32 nStrips;			// Number of triangle strips (deprecated)
-        # [036-039] int32 stripSize;		// size of strip data  (deprecated)
-        # [040-043] int32 normals;			// 4	Int32	<normals>	Start of vertex normal data (0 if not in file)
-        # [044-047] int32 uvoffset;			// Start of surface parameterization data (0 if not in file)
-        # [048-051] int32 vcoffset;			// vertex color
-        # [052-055] int32 labelOffset;	// vertex labels
+        # [000-011] char headerType[12]; // should be DFS_BE v2.0\0 on big-endian machines, DFS_LEv1.0\0 on little-endian
+        # [012-015] int32 hdrsize;          // Size of complete header (i.e., offset of first data element)
+        # [016-010] int32 mdoffset;         // Start of metadata.
+        # [020-023] int32 pdoffset;         // Start of patient data header.
+        # [024-027] int32 nTriangles;       // Number of triangles
+        # [028-031] int32 nVertices;        // Number of vertices
+        # [032-035] int32 nStrips;          // Number of triangle strips (deprecated)
+        # [036-039] int32 stripSize;        // size of strip data  (deprecated)
+        # [040-043] int32 normals;          // 4    Int32   <normals>   Start of vertex normal data (0 if not in file)
+        # [044-047] int32 uvoffset;         // Start of surface parameterization data (0 if not in file)
+        # [048-051] int32 vcoffset;         // vertex color
+        # [052-055] int32 labelOffset;  // vertex labels
         # [056-059] int32 vertexAttributes; // vertex attributes (float32 array of length NV)
         # [060-183] uint8 pad2[4 + 15*8]; // formerly 4x4 matrix, affine transformation to world coordinates, now used to add new fields
 
