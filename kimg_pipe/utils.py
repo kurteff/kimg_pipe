@@ -12,6 +12,7 @@ import nibabel
 import numpy as np
 import pandas as pd
 import os
+import re
 from PIL import ImageColor
 import warnings
 from pyface.api import GUI
@@ -27,7 +28,31 @@ import warnings
 # # # # # # # # # # # # # # # # #
 # DATA LOADING / PREPROCESSING  #
 # # # # # # # # # # # # # # # # #
-def nearest_electrode_vert(self, cortex_verts, elecmatrix, dist_thresh=4):
+def convert_bids2fsdat(fpath, outdir=None, denorm=False):
+	'''
+	Reads a BIDS electrodes.tsv and saves a freesurfer-readable .dat file for each device
+		* outdir : folder where the output should be saved. will get one .dat file for each device
+		* denorm : if electrodes.tsv is normalized, convert it back into the scanner space
+	'''
+	if outdir is None:
+		outdir = os.getcwd()
+	df = pd.read_csv(fpath, delimiter='\t') # electrodes.tsv is tab-separated
+	devices = np.unique([re.sub('\d+','',s) for s in df['name'].values])
+	for d in devices:
+		dat_file = ["\n"]
+		for i,row in df.iterrows():
+			if re.sub('\d+','',row['name']) == d:
+				x = row['x']; y = row['y']; z = row['z']
+				dat_file.append("%.4f     %.4f       %.4f\n" % (x,y,z))
+		# Write footer
+		dat_file.append("info \n")
+		dat_file.append(f"numpoints {len(dat_file)-2}\n") # -1 for "\n" and -1 for "info \n" = -2
+		dat_file.append("useRealRAS 0") # we want TkRAS not scanner coordinates
+		outfile = outdir + '/' + d + '.dat'
+		with open(outfile, 'w') as f:
+			f.writelines(dat_file)
+
+def nearest_electrode_vert(cortex_verts, elecmatrix, dist_thresh=4):
 	''' Find the vertex on a mesh that is closest to the given electrode
 	coordinates.
 	

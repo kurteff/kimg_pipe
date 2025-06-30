@@ -582,6 +582,8 @@ class freeCoG:
 
         ## Save to .mat file in rosa_elecs_dir 
         # Code for this block is based off bits of SupplementalScripts/electrode_picker.py
+            if not os.path.isdir(rosa_elecs_dir):
+                os.mkdir(rosa_elecs_dir)
             elecfile = os.path.join(rosa_elecs_dir, f"{device_name}.mat")
             elecmatrix = [] # This will be the electrode coordinates
             # Apply orientation to the image so that the order of the dimensions will be
@@ -756,6 +758,7 @@ class freeCoG:
         if not convert_all and device_name is None:
             raise ValueError("Must specify either convert_all=True or pass a device_name.")
         elif convert_all:
+            # Convert all elecs in TDT_elecs_all.mat
             elecmat = self.elecs_dir + "/" + "ROSA_elecs_all.mat" if rosa else self.elecs_dir + "/" + "TDT_elecs_all.mat"
             if not os.path.isfile(elecmat):
                 raise FileNotFoundError(f"{elecmat.split("/")[-1]} has not been created yet.")
@@ -1262,6 +1265,7 @@ class freeCoG:
         # tessellate all subjects freesurfer subcortical segmentations
         print('::: Tesselating freesurfer subcortical segmentations from aseg using aseg2srf... :::')
         print(os.path.join(self.kimg_pipe_dir, 'SupplementalScripts', 'aseg2srf.sh'))
+        os.system(f'export SUBJECTS_DIR={self.subj_dir}')
         os.system(os.path.join(self.kimg_pipe_dir, 'SupplementalScripts', 'aseg2srf.sh') + ' -s "%s" -l "4 5 10 11 12 13 17 18 26 \
                  28 43 44  49 50 51 52 53 54 58 60 14 15 16" -d' % (self.subj))
 
@@ -1359,6 +1363,13 @@ class freeCoG:
         cortex = {'tri': subcort_tri+1, 'vert': subcort_vert}
         scipy.io.savemat(out_file_struct, {'cortex': cortex})
 
+    def get_devices(self):
+        '''
+        Returns a list of device names, also saves them as self.devices
+        '''
+        self.devices = [s.split(".mat")[0] for s in os.listdir(self.elecs_dir + '/individual_elecs') if 'mat' in s]
+        return self.devices
+
     def make_elecs_all(self, input_list=None, outfile=None, rosa=False):
         '''Interactively creates a .mat file with the montage and coordinates of 
         all the elecs files in the /elecs_individual folder.
@@ -1376,7 +1387,7 @@ class freeCoG:
             the name of the file you want to save to, specify this if not using the interactive version
         rosa : bool
             makes ROSA_elecs_all.mat from the elecfiles in /elecs/rosa folder
-        
+
 
         Usage
         -----
@@ -1881,6 +1892,7 @@ class freeCoG:
         Returns
         -------
         None.
+
         '''
 
         # run cvs register

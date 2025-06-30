@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Print usage if no argument is given
-source ~/.bash_profile
+# source ~/.bash_profile
 if [ -z "$1" ]; then
 cat <<EOU
 Generate surfaces for the subcortical structures
