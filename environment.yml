@@ -213,4 +213,4 @@ dependencies:
     - webencodings==0.5.1
     - widgetsnbextension==3.5.1
     - wxpython==4.2.1
-prefix: /Users/kfsh/opt/anaconda3/envs/mne
+prefix: ~/miniconda3/envs/kimg_pipe

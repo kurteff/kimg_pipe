@@ -761,7 +761,7 @@ class freeCoG:
             # Convert all elecs in TDT_elecs_all.mat
             elecmat = self.elecs_dir + "/" + "ROSA_elecs_all.mat" if rosa else self.elecs_dir + "/" + "TDT_elecs_all.mat"
             if not os.path.isfile(elecmat):
-                raise FileNotFoundError(f"{elecmat.split("/")[-1]} has not been created yet.")
+                raise FileNotFoundError(f"{elecmat.split('/')[-1]} has not been created yet.")
         elif device_name is not None:
             elec_folder = os.path.join(self.elecs_dir, 'rosa') if rosa else os.path.join(self.elecs_dir,'individual_elecs')
             elecmat = elec_folder + '/' + device_name + '.mat'
