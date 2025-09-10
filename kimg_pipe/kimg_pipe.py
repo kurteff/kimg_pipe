@@ -1817,66 +1817,67 @@ class freeCoG:
         elecfile_nearest_warped_text = os.path.join(self.elecs_dir, elecfile_prefix+'_nearest_warped.txt')
         elecfile_RAS_text = os.path.join(self.elecs_dir, elecfile_prefix+'_RAS.txt')
         
+        # If the warp has been done already, don't do it again
         if os.path.isfile(elecfile_warped):
             print("The electrodes in %s have already been warped and are in %s"%(elecfile, elecfile_warped))
-            return
-        
-        orig_elecs = scipy.io.loadmat(elecfile)
+        else:
+            # If the warp hasn't been done, do all this stuff:
+            orig_elecs = scipy.io.loadmat(elecfile)
 
-        if 'depth' in orig_elecs['anatomy'][:,2] and warp_depths:
-            #if mri_cvs_register already run, don't run again
-            if not os.path.isfile(os.path.join(self.subj_dir, self.subj, 'cvs', 'combined_to'+template+'_elreg_afteraseg-norm.tm3d')):
-                print("Running patient.get_cvsWarp()...")
-                self.get_cvsWarp(template)
-            else:
-                print('%s registration file already created, proceeding to apply the depth warp'%(os.path.join(self.subj_dir, self.subj, 'cvs', 'combined_to'+template+'_elreg_afteraseg-norm.tm3d')))
-            if not os.path.isfile(elecfile_nearest_warped):
-                print("Running patient.apply_cvsWarp()...")
-                self.apply_cvsWarp(elecfile_prefix,template)
-            else:
-                print("Depth warping has already been applied to the depth electrodes of %s and are in %s"\
-                    %(elecfile, elecfile_nearest_warped))
+            if 'depth' in orig_elecs['anatomy'][:,2] and warp_depths:
+                #if mri_cvs_register already run, don't run again
+                if not os.path.isfile(os.path.join(self.subj_dir, self.subj, 'cvs', 'combined_to'+template+'_elreg_afteraseg-norm.tm3d')):
+                    print("Running patient.get_cvsWarp()...")
+                    self.get_cvsWarp(template)
+                else:
+                    print('%s registration file already created, proceeding to apply the depth warp'%(os.path.join(self.subj_dir, self.subj, 'cvs', 'combined_to'+template+'_elreg_afteraseg-norm.tm3d')))
+                if not os.path.isfile(elecfile_nearest_warped):
+                    print("Running patient.apply_cvsWarp()...")
+                    self.apply_cvsWarp(elecfile_prefix,template)
+                else:
+                    print("Depth warping has already been applied to the depth electrodes of %s and are in %s"\
+                        %(elecfile, elecfile_nearest_warped))
 
-            depth_warps = scipy.io.loadmat(elecfile_nearest_warped)
-            depth_indices = np.where(orig_elecs['anatomy'][:,2]=='depth')[0]
-            if depth_warps['elecmatrix'].size > 0:
-                orig_elecs['elecmatrix'][depth_indices] = depth_warps['elecmatrix']
-            if not os.path.isfile(os.path.join(self.elecs_dir,'depthWarpsQC.pdf')):
-                print("Running patient.check_depth_warps()...")
-                self.check_depth_warps(elecfile_prefix,template)
-        
-        if warp_surface:
-            #if surface warp already run, don't run again
-            if not os.path.isfile(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')):
-                print("Running patient.get_surface_warp()...")
-                self.get_surface_warp(elecfile_prefix,template)
-            else:
-                print('Found %s, not running surface warp again'%(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')))
-            elecfile_surface_warped = os.path.join(self.elecs_dir, elecfile_prefix+'_surface_warped.mat')
-            surface_warps = scipy.io.loadmat(elecfile_surface_warped)
-            surface_indices = np.array(list(set(np.where(orig_elecs['anatomy'][:,2]!='depth')[0]) & set(np.where(np.all(~np.isnan(orig_elecs['elecmatrix']),axis=1))[0])),dtype='int64')
-            if surface_warps['elecmatrix'].size > 0:
-                orig_elecs['elecmatrix'][surface_indices,:] = surface_warps['elecmatrix']
+                depth_warps = scipy.io.loadmat(elecfile_nearest_warped)
+                depth_indices = np.where(orig_elecs['anatomy'][:,2]=='depth')[0]
+                if depth_warps['elecmatrix'].size > 0:
+                    orig_elecs['elecmatrix'][depth_indices] = depth_warps['elecmatrix']
+                if not os.path.isfile(os.path.join(self.elecs_dir,'depthWarpsQC.pdf')):
+                    print("Running patient.check_depth_warps()...")
+                    self.check_depth_warps(elecfile_prefix,template)
+            
+            if warp_surface:
+                #if surface warp already run, don't run again
+                if not os.path.isfile(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')):
+                    print("Running patient.get_surface_warp()...")
+                    self.get_surface_warp(elecfile_prefix,template)
+                else:
+                    print('Found %s, not running surface warp again'%(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')))
+                elecfile_surface_warped = os.path.join(self.elecs_dir, elecfile_prefix+'_surface_warped.mat')
+                surface_warps = scipy.io.loadmat(elecfile_surface_warped)
+                surface_indices = np.array(list(set(np.where(orig_elecs['anatomy'][:,2]!='depth')[0]) & set(np.where(np.all(~np.isnan(orig_elecs['elecmatrix']),axis=1))[0])),dtype='int64')
+                if surface_warps['elecmatrix'].size > 0:
+                    orig_elecs['elecmatrix'][surface_indices,:] = surface_warps['elecmatrix']
 
-        #if both depth and surface warping have been done, create the combined warp .mat file
-        if warp_depths and warp_surface:
-            scipy.io.savemat(elecfile_warped,{'elecmatrix':orig_elecs['elecmatrix'],'anatomy':orig_elecs['anatomy']})
+            #if both depth and surface warping have been done, create the combined warp .mat file
+            if warp_depths and warp_surface:
+                scipy.io.savemat(elecfile_warped,{'elecmatrix':orig_elecs['elecmatrix'],'anatomy':orig_elecs['anatomy']})
             
             print("Plotting recon anatomy...")
             self.plot_recon_anatomy_compare_warped(elecfile_prefix=elecfile_prefix)
 
-            if not os.path.isdir(os.path.join(self.elecs_dir, 'warps_preproc')):
-                print('Making preproc directory')
-                os.mkdir(os.path.join(self.elecs_dir, 'warps_preproc'))
-            preproc_dir = os.path.join(self.elecs_dir, 'warps_preproc')
-            if os.path.isfile(elecfile_surface_warped):
-                os.system('mv %s %s;' %(elecfile_surface_warped, preproc_dir))
-            if os.path.isfile(elecfile_nearest_warped):
-                os.system('mv %s %s'%(elecfile_nearest_warped, preproc_dir))
-            if os.path.isfile(elecfile_nearest_warped_text):
-                os.system('mv %s %s'%(elecfile_nearest_warped_text, preproc_dir))
-            if os.path.isfile(elecfile_RAS_text):
-                os.system('mv %s %s'%(elecfile_RAS_text, preproc_dir))
+        if not os.path.isdir(os.path.join(self.elecs_dir, 'warps_preproc')):
+            print('Making preproc directory')
+            os.mkdir(os.path.join(self.elecs_dir, 'warps_preproc'))
+        preproc_dir = os.path.join(self.elecs_dir, 'warps_preproc')
+        if os.path.isfile(elecfile_surface_warped):
+            os.system('mv %s %s;' %(elecfile_surface_warped, preproc_dir))
+        if os.path.isfile(elecfile_nearest_warped):
+            os.system('mv %s %s'%(elecfile_nearest_warped, preproc_dir))
+        if os.path.isfile(elecfile_nearest_warped_text):
+            os.system('mv %s %s'%(elecfile_nearest_warped_text, preproc_dir))
+        if os.path.isfile(elecfile_RAS_text):
+            os.system('mv %s %s'%(elecfile_RAS_text, preproc_dir))
 
     def get_cvsWarp(self, template='cvs_avg35_inMNI152', openmp_threads=4):
         '''Method for obtaining nonlinearly warped MNI coordinates using 
