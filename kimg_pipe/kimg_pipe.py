@@ -1816,7 +1816,8 @@ class freeCoG:
         elecfile_nearest_warped = os.path.join(self.elecs_dir, '%s_nearest_warped.mat'%(elecfile_prefix))
         elecfile_nearest_warped_text = os.path.join(self.elecs_dir, elecfile_prefix+'_nearest_warped.txt')
         elecfile_RAS_text = os.path.join(self.elecs_dir, elecfile_prefix+'_RAS.txt')
-        
+        elecfile_surface_warped = os.path.join(self.elecs_dir, elecfile_prefix+'_surface_warped.mat')
+
         # If the warp has been done already, don't do it again
         if os.path.isfile(elecfile_warped):
             print("The electrodes in %s have already been warped and are in %s"%(elecfile, elecfile_warped))
@@ -1853,7 +1854,6 @@ class freeCoG:
                     self.get_surface_warp(elecfile_prefix,template)
                 else:
                     print('Found %s, not running surface warp again'%(os.path.join(self.subj_dir,self.subj,'elecs', elecfile_prefix + '_surface_warped.mat')))
-                elecfile_surface_warped = os.path.join(self.elecs_dir, elecfile_prefix+'_surface_warped.mat')
                 surface_warps = scipy.io.loadmat(elecfile_surface_warped)
                 surface_indices = np.array(list(set(np.where(orig_elecs['anatomy'][:,2]!='depth')[0]) & set(np.where(np.all(~np.isnan(orig_elecs['elecmatrix']),axis=1))[0])),dtype='int64')
                 if surface_warps['elecmatrix'].size > 0:
